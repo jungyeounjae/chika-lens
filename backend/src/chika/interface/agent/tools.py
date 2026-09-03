@@ -23,8 +23,13 @@ def set_criteria(
     budget_min_yen: int | None = None,
     budget_max_yen: int | None = None,
     household: str = "single",
+    exclude_wards: list[str] | None = None,
 ) -> dict[str, Any]:
-    """사용자 조건을 확정한다. 다이얼 5개는 0~5의 상대 강도다."""
+    """사용자 조건을 확정한다. 다이얼 5개는 0~5의 상대 강도다.
+
+    commute_to는 반드시 실제 역 이름(한국어/일본어) 또는 id여야 한다.
+    unknown_commute_station 오류가 오면 후보를 사용자에게 되물어야 한다.
+    """
     return actions.act_set_criteria(
         ctx.context,
         korean_life=korean_life,
@@ -37,6 +42,7 @@ def set_criteria(
         budget_min_yen=budget_min_yen,
         budget_max_yen=budget_max_yen,
         household=household,
+        exclude_wards=exclude_wards or (),
     )
 
 

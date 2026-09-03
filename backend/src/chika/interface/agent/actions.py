@@ -8,7 +8,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+from chika.application.usecase.explain_area import MetricDetail
+from chika.application.usecase.rank_areas import RankedArea
 from chika.domain.model.criteria import Household, SearchCriteria
+from chika.domain.model.metrics import WARD_RESOLUTION_METRICS, MetricKey
+from chika.domain.model.station import Station
 from chika.domain.model.weights import Dial, DialSettings
 from chika.domain.service.dials import expand_dials
 from chika.interface.agent.state import SessionState
@@ -20,6 +24,14 @@ VALUE_GAP_DISCLAIMER = (
     "이 수치는 공개 데이터에 기반한 통계적 추정이며 투자 조언이 아닙니다. "
     "실제 계약 전에는 반드시 현장과 중개사를 통해 확인하세요."
 )
+
+
+def _resolve_commute_station(commute_to: str, stations: Sequence[Station]) -> Station | None:
+    """통근지 이름(한국어/일본어/id)을 역으로 해석한다. 못 찾으면 None."""
+    for station in stations:
+        if commute_to in (station.id, station.name_ja, station.name_ko):
+            return station
+    return None
 
 
 def act_set_criteria(
@@ -44,6 +56,18 @@ def act_set_criteria(
             f"unknown household: {household!r} (single/couple/family 중 하나)"
         ) from exc
 
+    resolved_commute_to = commute_to
+    if commute_to is not None:
+        known_stations = state.usecases.rank.known_stations()
+        station = _resolve_commute_station(commute_to, known_stations)
+        if station is None:
+            return {
+                "error": "unknown_commute_station",
+                "commute_to": commute_to,
+                "candidates": [s.name_ko for s in known_stations[:5]],
+            }
+        resolved_commute_to = station.id
+
     budget: tuple[int, int] | None = None
     if budget_min_yen is not None or budget_max_yen is not None:
         budget = (budget_min_yen or 0, budget_max_yen or 10_000_000)
@@ -59,7 +83,7 @@ def act_set_criteria(
     )
     criteria = SearchCriteria(
         dials=dials,
-        commute_to=commute_to,
+        commute_to=resolved_commute_to,
         commute_max_minutes=commute_max_minutes,
         budget_yen=budget,
         household=household_value,
@@ -89,6 +113,19 @@ def act_rank_areas(state: SessionState, limit: int = 5) -> dict[str, Any]:
     ranked = state.usecases.rank.execute(state.criteria, limit=capped)
     state.last_ranking = ranked
 
+    commute_active = state.criteria.commute_to is not None
+
+    def driver(key: MetricKey, contribution: float, row: RankedArea) -> dict[str, Any]:
+        percentile = row.percentile[key]
+        return {
+            "metric": key.value,
+            "contribution": round(contribution, 2),
+            "percentile": round(percentile, 1),
+            "top_percent": round(100 - percentile, 1),
+            "is_ward_resolution": key in WARD_RESOLUTION_METRICS,
+            "is_missing": key in row.score.missing,
+        }
+
     return {
         "areas": [
             {
@@ -101,10 +138,11 @@ def act_rank_areas(state: SessionState, limit: int = 5) -> dict[str, Any]:
                 "score": round(row.score.total, 1),
                 "rent_yen": row.rent_yen,
                 "commute_minutes": row.commute_minutes,
+                "commute_uncertain": commute_active and row.commute_minutes is None,
                 "top_drivers": [
-                    {"metric": key.value, "contribution": round(value, 2)}
-                    for key, value in row.score.top_drivers(3)
+                    driver(key, value, row) for key, value in row.score.top_drivers(3)
                 ],
+                "missing_metrics": sorted(key.value for key in row.score.missing),
             }
             for row in ranked
         ]
@@ -119,7 +157,7 @@ def act_explain_area(state: SessionState, station_id: str) -> dict[str, Any]:
     except KeyError:
         return {"error": "unknown_station", "station_id": station_id}
 
-    def detail(item: Any) -> dict[str, Any]:
+    def detail(item: MetricDetail) -> dict[str, Any]:
         return {
             "metric": item.key.value,
             "percentile": round(item.percentile, 1),

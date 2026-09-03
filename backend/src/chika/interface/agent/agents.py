@@ -21,6 +21,9 @@ _INTAKE_INSTRUCTIONS = """\
 2. 조건이 충분해지면 set_criteria를 호출하고, 곧바로 AnalysisAgent에게 넘깁니다.
 3. 도쿄 23区 밖(요코하마·사이타마·오사카 등)은 데이터가 없습니다.
    범위 밖 요청은 정중히 거절하고 23区 내에서 대안을 제안하세요.
+4. commute_to는 반드시 실제 역 이름(한국어 또는 일본어)이어야 합니다. 지명·회사명이 아니라
+   가장 가까운 역 이름을 물어보세요. set_criteria가 unknown_commute_station 오류를 반환하면
+   candidates를 사용자에게 보여주고 역 이름을 다시 확인하세요. 임의로 역을 골라 채우지 마세요.
 """
 
 _ANALYSIS_INSTRUCTIONS = """\
@@ -43,7 +46,7 @@ _ANALYSIS_INSTRUCTIONS = """\
 """
 
 
-def build_agents(state: SessionState) -> Agent[SessionState]:
+def build_agents() -> Agent[SessionState]:
     """진입 에이전트(IntakeAgent)를 반환한다. state는 Runner.run(context=...)로 넘긴다."""
     analysis: Agent[SessionState] = Agent(
         name="AnalysisAgent",

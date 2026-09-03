@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from chika.domain.model.criteria import SearchCriteria
+from chika.domain.model.metrics import MetricKey
 from chika.domain.model.score import AreaScore
 from chika.domain.model.station import Station
 from chika.domain.repository import (
@@ -23,6 +25,7 @@ class RankedArea:
     score: AreaScore
     rent_yen: int | None
     commute_minutes: int | None
+    percentile: Mapping[MetricKey, float]
 
 
 class RankAreas:
@@ -36,10 +39,16 @@ class RankAreas:
         self._commute = commute
         self._prices = prices
 
+    def known_stations(self) -> list[Station]:
+        """알려진 역 목록. interface 계층이 통근지 이름을 역 id로 해석할 때 쓴다."""
+        return list(self._areas.stations())
+
     def execute(self, criteria: SearchCriteria, limit: int = 5) -> list[RankedArea]:
         stations = {station.id: station for station in self._areas.stations()}
         # 퍼센타일은 필터 이전, 전체 모집단 기준으로 계산한다 (스펙 §6.3).
-        scores = rank(normalize(self._areas.raw_metrics()), expand_dials(criteria.dials))
+        normalized = normalize(self._areas.raw_metrics())
+        percentiles_by_id = {area.station_id: area.percentile for area in normalized}
+        scores = rank(normalized, expand_dials(criteria.dials))
 
         results: list[RankedArea] = []
         for area_score in scores:
@@ -67,6 +76,7 @@ class RankAreas:
                     score=area_score,
                     rent_yen=rent,
                     commute_minutes=minutes,
+                    percentile=percentiles_by_id[area_score.station_id],
                 )
             )
             if len(results) >= limit:

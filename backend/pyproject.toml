@@ -1,0 +1,39 @@
+[project]
+name = "chika"
+version = "0.1.0"
+description = "Chika Lens - Tokyo living-area analysis agent"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[project.optional-dependencies]
+agent = ["openai-agents>=0.1.0", "pydantic>=2.7"]
+etl = ["shapely>=2.0", "pyproj>=3.6"]
+
+[dependency-groups]
+dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chika"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "TID"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"pydantic".msg = "domain/application 계층에서 금지. interface 계층에서만 사용."
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"

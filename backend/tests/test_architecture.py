@@ -73,3 +73,22 @@ def test_openai_sdk_never_appears_in_domain_or_application() -> None:
             if "agents" in roots or "openai" in roots or "pydantic" in roots:
                 violations.append(str(path.relative_to(SRC)))
     assert not violations, f"LLM/pydantic 의존이 안쪽 계층에 있다: {violations}"
+
+
+def test_domain_and_application_use_absolute_imports_only() -> None:
+    """상대 임포트는 위의 가드들을 통째로 우회한다.
+
+    `_imported_roots`는 `level != 0`인 ImportFrom을 건너뛰고, 바깥 계층 검사들은
+    "chika.infrastructure" 같은 리터럴을 찾는데 `from ..infrastructure import x`에는
+    그 문자열이 없다. 두 계층은 이미 절대 임포트만 쓰므로 아예 금지한다.
+    """
+    violations: list[str] = []
+    for layer in ("domain", "application"):
+        for path in _modules(layer):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            violations.extend(
+                f"{path.relative_to(SRC)}:{node.lineno}"
+                for node in ast.walk(tree)
+                if isinstance(node, ast.ImportFrom) and node.level > 0
+            )
+    assert not violations, f"상대 임포트 금지 (가드를 우회한다): {violations}"

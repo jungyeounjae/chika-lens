@@ -48,6 +48,10 @@ def run_demo() -> None:
         rent = f"{area['rent_yen']:,}엔" if area["rent_yen"] is not None else "데이터 없음"
         print(f"{index}. {area['name_ko']} ({area['ward']})  점수 {area['score']}  월세 {rent}")
 
+    if not ranking["areas"]:
+        print("\n조건에 맞는 역세권이 없습니다.")
+        return
+
     top_id = ranking["areas"][0]["station_id"]
     detail = act_explain_area(state, top_id)
     print(f"\n[1위 근거] {detail['name_ko']}")

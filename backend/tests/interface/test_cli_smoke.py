@@ -19,3 +19,5 @@ def test_run_demo_prints_a_ranking(capsys) -> None:  # type: ignore[no-untyped-d
     output = capsys.readouterr().out
     assert "1." in output
     assert "근거" in output
+    assert "구 단위 지표" in output  # is_ward_resolution 라벨이 실제로 찍힌다
+    assert "데이터 없음" in output  # missing_metrics 라벨이 실제로 찍힌다

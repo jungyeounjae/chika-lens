@@ -60,3 +60,7 @@ dist/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Worktrees / SDD scratch
+.claude/worktrees/
+.superpowers/

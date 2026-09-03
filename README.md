@@ -28,4 +28,4 @@ frontend/                Next.js 채팅 인터페이스
 
 1. GCP 개인 프로젝트 설정
 2. Places Insights 샘플 데이터 신청
-3. Phase 0: 도메인 모델 + 스코어링 구현
+3. ~~Phase 0: 도메인 모델 + 스코어링 구현~~ — 완료. 계획: [2026-09-03-chika-lens-phase0.md](docs/superpowers/plans/2026-09-03-chika-lens-phase0.md)

@@ -62,7 +62,7 @@ class ExplainArea:
         return AreaExplanation(
             station=station,
             total=area_score.total,
-            rent_yen=self._prices.median_rent_yen(station_id, criteria.household),
+            rent_yen=self._prices.median_rents(criteria.household).get(station_id),
             strengths=[detail(key) for key, _ in area_score.top_drivers(top_n)],
             weaknesses=[detail(key) for key, _ in area_score.bottom_drivers(top_n)],
             missing=sorted(area.missing),

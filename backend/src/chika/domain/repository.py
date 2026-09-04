@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Protocol
 
 from chika.domain.model.criteria import Household
@@ -17,10 +17,20 @@ class AreaMetricsRepository(Protocol):
 
 
 class CommuteRepository(Protocol):
-    def minutes_to(self, origin_station_id: str, dest_station_id: str) -> int | None:
-        """알 수 없으면 None. 하드 필터는 None을 '탈락'이 아니라 '판단 보류'로 다룬다."""
+    def minutes_from_all(self, dest_station_id: str) -> Mapping[str, int]:
+        """목적지까지의 소요시간을 역 id → 분으로 한 번에 반환한다.
+
+        역마다 조회하면 실제 어댑터에서 역 수만큼 라운드트립이 된다.
+        키의 부재가 '알 수 없음'이며, 하드 필터는 이를 '탈락'이 아니라
+        '판단 보류'로 다룬다.
+        """
         ...
 
 
 class PriceRepository(Protocol):
-    def median_rent_yen(self, station_id: str, household: Household) -> int | None: ...
+    def median_rents(self, household: Household) -> Mapping[str, int]:
+        """가구 유형에 대한 역 id → 시세 중앙값을 한 번에 반환한다.
+
+        키의 부재가 '시세를 모른다'는 뜻이다. 위와 같은 이유로 배치 조회다.
+        """
+        ...

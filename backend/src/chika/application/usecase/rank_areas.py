@@ -50,6 +50,15 @@ class RankAreas:
         percentiles_by_id = {area.station_id: area.percentile for area in normalized}
         scores = rank(normalized, expand_dials(criteria.dials))
 
+        # 리포지토리 조회는 루프 밖에서 한 번씩만 한다. 역마다 조회하면
+        # 실제 어댑터에서 역 수만큼 라운드트립이 된다.
+        rents = self._prices.median_rents(criteria.household)
+        commute_minutes = (
+            self._commute.minutes_from_all(criteria.commute_to)
+            if criteria.commute_to is not None
+            else {}
+        )
+
         results: list[RankedArea] = []
         for area_score in scores:
             station = stations.get(area_score.station_id)
@@ -58,14 +67,12 @@ class RankAreas:
             if station.ward in criteria.exclude_wards:
                 continue
 
-            rent = self._prices.median_rent_yen(station.id, criteria.household)
+            rent = rents.get(station.id)
             if not _within_budget(rent, criteria):
                 continue
 
             minutes = (
-                self._commute.minutes_to(station.id, criteria.commute_to)
-                if criteria.commute_to is not None
-                else None
+                commute_minutes.get(station.id) if criteria.commute_to is not None else None
             )
             if not _within_commute(minutes, criteria):
                 continue

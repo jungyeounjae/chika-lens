@@ -32,18 +32,22 @@ class FakeCommuteRepository:
     def __init__(self, table: Mapping[tuple[str, str], int]) -> None:
         self._table = dict(table)
 
-    def minutes_to(self, origin_station_id: str, dest_station_id: str) -> int | None:
-        if origin_station_id == dest_station_id:
-            return 0
-        return self._table.get((origin_station_id, dest_station_id))
+    def minutes_from_all(self, dest_station_id: str) -> Mapping[str, int]:
+        minutes = {
+            origin: value
+            for (origin, dest), value in self._table.items()
+            if dest == dest_station_id
+        }
+        minutes[dest_station_id] = 0
+        return minutes
 
 
 class FakePriceRepository:
     def __init__(self, table: Mapping[str, int]) -> None:
         self._table = dict(table)
 
-    def median_rent_yen(self, station_id: str, household: Household) -> int | None:
-        base = self._table.get(station_id)
-        if base is None:
-            return None
-        return round(base * HOUSEHOLD_RENT_MULTIPLIER[household])
+    def median_rents(self, household: Household) -> Mapping[str, int]:
+        multiplier = HOUSEHOLD_RENT_MULTIPLIER[household]
+        return {
+            station_id: round(base * multiplier) for station_id, base in self._table.items()
+        }

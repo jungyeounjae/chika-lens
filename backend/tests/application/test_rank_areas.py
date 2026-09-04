@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+
 import pytest
 
 from chika.application.usecase.rank_areas import RankAreas
@@ -177,3 +179,62 @@ def test_ranking_is_deterministic_across_runs() -> None:
     first = [r.station.id for r in _usecase(stations, raws, commute, prices).execute(criteria)]
     second = [r.station.id for r in _usecase(stations, raws, commute, prices).execute(criteria)]
     assert first == second
+
+
+class _CountingPriceRepository:
+    """호출 횟수를 세는 래퍼. 실제 어댑터에서는 1회 = 쿼리 1회다."""
+
+    def __init__(self, table: dict[str, int]) -> None:
+        self._inner = FakePriceRepository(table)
+        self.calls = 0
+
+    def median_rents(self, household: Household) -> Mapping[str, int]:
+        self.calls += 1
+        return self._inner.median_rents(household)
+
+
+class _CountingCommuteRepository:
+    def __init__(self, table: dict[tuple[str, str], int]) -> None:
+        self._inner = FakeCommuteRepository(table)
+        self.calls = 0
+
+    def minutes_from_all(self, dest_station_id: str) -> Mapping[str, int]:
+        self.calls += 1
+        return self._inner.minutes_from_all(dest_station_id)
+
+
+def test_repositories_are_queried_once_per_execute_not_once_per_station() -> None:
+    """역 수에 비례해 조회하면 실제 어댑터에서 250 라운드트립이 된다."""
+    stations, raws, commute, prices = build_seed(count=40)
+    counting_prices = _CountingPriceRepository(prices)
+    counting_commute = _CountingCommuteRepository(commute)
+    usecase = RankAreas(
+        areas=FakeAreaMetricsRepository(stations, raws),
+        commute=counting_commute,
+        prices=counting_prices,
+    )
+
+    usecase.execute(
+        SearchCriteria(
+            dials=DialSettings.balanced(),
+            commute_to=stations[0].id,
+            commute_max_minutes=60,
+            budget_yen=(0, 10_000_000),
+        ),
+        limit=10,
+    )
+
+    assert counting_prices.calls == 1
+    assert counting_commute.calls == 1
+
+
+def test_commute_repository_is_not_queried_without_a_destination() -> None:
+    stations, raws, commute, prices = build_seed(count=10)
+    counting_commute = _CountingCommuteRepository(commute)
+    RankAreas(
+        areas=FakeAreaMetricsRepository(stations, raws),
+        commute=counting_commute,
+        prices=FakePriceRepository(prices),
+    ).execute(SearchCriteria(dials=DialSettings.balanced()), limit=10)
+
+    assert counting_commute.calls == 0

@@ -33,15 +33,24 @@ cd backend && uv run python -m chika.etl.build_stations \
 헤맬 가능성이 크다. `build_stations.py`에 "파싱 결과 0건이면 비정상 종료"를
 넣어두는 편이 좋다.
 
-## 2. 포트 두 개는 모양을 바꿔야 한다 (N+1)
+## 2. 포트 두 개의 N+1 — ✅ 해결 (2026-09-04, 커밋 `42b321f`)
 
-최종 리뷰 지적. 지금 고치면 Fake 2개와 유스케이스 1곳만 손대면 되지만,
-실제 어댑터를 쓴 뒤에 고치면 비용이 커진다.
+최종 리뷰 지적. 어댑터를 만들기 전에 처리해 비용을 줄였다.
 
-| 포트 | 현재 | 문제 | 권장 |
-|---|---|---|---|
-| `PriceRepository.median_rent_yen(station_id, household)` | 역마다 1회 | 랭킹 루프 안에서 최대 250회 순차 호출 → MLIT 어댑터에서 250 라운드트립 | `median_rents(household) -> Mapping[str, int \| None]` 배치 |
-| `CommuteRepository.minutes_to(origin, dest)` | 역마다 1회 | 동일 | `minutes_from_all(dest) -> Mapping[str, int]` |
+| 포트 | 이전 | 현재 |
+|---|---|---|
+| `PriceRepository` | `median_rent_yen(station_id, household)` — 역마다 1회 | `median_rents(household) -> Mapping[str, int]` — 실행당 1회 |
+| `CommuteRepository` | `minutes_to(origin, dest)` — 역마다 1회 | `minutes_from_all(dest) -> Mapping[str, int]` — 실행당 1회 |
+
+**키의 부재가 '알 수 없음'이다.** 데이터 부재를 탈락으로 바꾸지 않는 기존 규칙
+(`_within_budget` / `_within_commute`)은 그대로다.
+
+회귀 방지: `test_repositories_are_queried_once_per_execute_not_once_per_station`.
+루프 안으로 되돌리면 호출이 11회로 늘며 실패하는 것을 확인했다.
+
+**Phase 1 어댑터 작성 시:** MLIT 어댑터는 `median_rents`를 역 전체에 대해 한 번의
+쿼리로 채워야 한다. 내부에서 역마다 API를 때리면 포트 모양만 배치이고 실제로는
+N+1이 그대로 남는다.
 
 `AreaMetricsRepository.raw_metrics()`는 **지금 모양이 맞다.** 쿼리 파라미터가
 없는 것은 결함이 아니라 "퍼센타일은 필터 이전 전체 모집단에서 계산한다"는

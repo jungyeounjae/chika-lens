@@ -40,21 +40,28 @@ def test_area_repository_returns_what_it_was_given() -> None:
     assert list(repo.raw_metrics()) == raws
 
 
-def test_commute_repository_returns_none_for_unknown_pair() -> None:
-    repo = FakeCommuteRepository({("a", "b"): 15})
-    assert repo.minutes_to("a", "b") == 15
-    assert repo.minutes_to("a", "zzz") is None
+def test_commute_repository_returns_every_origin_for_one_destination() -> None:
+    repo = FakeCommuteRepository({("a", "hub"): 15, ("b", "hub"): 40, ("a", "other"): 5})
+    assert repo.minutes_from_all("hub") == {"a": 15, "b": 40, "hub": 0}
+
+
+def test_commute_omits_origins_it_does_not_know() -> None:
+    """키의 부재가 '알 수 없음'이다. 호출자는 이를 탈락이 아니라 판단 보류로 다룬다."""
+    repo = FakeCommuteRepository({("a", "hub"): 15})
+    assert "zzz" not in repo.minutes_from_all("hub")
 
 
 def test_commute_to_self_is_zero() -> None:
-    repo = FakeCommuteRepository({})
-    assert repo.minutes_to("a", "a") == 0
+    assert FakeCommuteRepository({}).minutes_from_all("a") == {"a": 0}
 
 
 def test_price_repository_scales_with_household_size() -> None:
     repo = FakePriceRepository({"a": 100_000})
-    assert repo.median_rent_yen("a", Household.SINGLE) == 100_000
-    single = repo.median_rent_yen("a", Household.SINGLE)
-    family = repo.median_rent_yen("a", Household.FAMILY)
-    assert single is not None and family is not None and family > single
-    assert repo.median_rent_yen("zzz", Household.SINGLE) is None
+    single = repo.median_rents(Household.SINGLE)
+    family = repo.median_rents(Household.FAMILY)
+    assert single["a"] == 100_000
+    assert family["a"] > single["a"]
+
+
+def test_price_repository_omits_stations_it_does_not_know() -> None:
+    assert "zzz" not in FakePriceRepository({"a": 100_000}).median_rents(Household.SINGLE)

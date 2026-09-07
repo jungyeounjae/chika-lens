@@ -8,9 +8,10 @@ dependencies = []
 [project.optional-dependencies]
 agent = ["openai-agents>=0.1.0", "pydantic>=2.7"]
 etl = ["shapely>=2.0", "pyproj>=3.6"]
+api = ["fastapi>=0.115", "uvicorn>=0.30", "sse-starlette>=2.1"]
 
 [dependency-groups]
-dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11"]
+dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11", "httpx>=0.27"]
 
 [build-system]
 requires = ["hatchling"]
@@ -22,6 +23,11 @@ packages = ["src/chika"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+filterwarnings = [
+    "error",
+    # starlette 내부의 anyio alias 경고. 우리 코드와 무관하고 고칠 수 없다.
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+]
 
 [tool.ruff]
 line-length = 100
@@ -32,6 +38,11 @@ select = ["E", "F", "I", "UP", "B", "TID"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "pydantic".msg = "domain/application 계층에서 금지. interface 계층에서만 사용."
+
+[tool.ruff.lint.per-file-ignores]
+# 위 금지는 안쪽 계층을 지키기 위한 것이다. interface 는 LLM 구조화 출력과
+# 요청 검증에 pydantic 을 쓰는 것이 제자리다 — 규칙 메시지가 말하는 그대로.
+"src/chika/interface/**" = ["TID251"]
 
 [tool.mypy]
 python_version = "3.12"

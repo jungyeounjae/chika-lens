@@ -10,7 +10,7 @@ from chika.infrastructure.fake.repositories import FakeAreaMetricsRepository, Fa
 
 def _station(station_id: str) -> Station:
     return Station(
-        id=station_id, name_ja=station_id, name_ko=station_id,
+        id=station_id, name_ja=station_id,
         ward="中野区", lat=35.70, lon=139.66, lines=(),
     )
 

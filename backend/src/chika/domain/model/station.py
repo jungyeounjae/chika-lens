@@ -14,7 +14,6 @@ STATION_RADIUS_METERS = 800
 class Station:
     id: str
     name_ja: str
-    name_ko: str
     ward: str
     lat: float
     lon: float

@@ -64,10 +64,10 @@ def test_station_inside_a_ward_is_kept_with_its_ward_name() -> None:
         "type": "FeatureCollection",
         "features": [_station_feature("中野", "中央線", 139.66, 35.70)],
     }
-    stations = parse_stations(n02, parse_ward_polygons(_N03), {"中野": "나카노"})
+    stations = parse_stations(n02, parse_ward_polygons(_N03))
     assert len(stations) == 1
     assert stations[0].ward == "中野区"
-    assert stations[0].name_ko == "나카노"
+    assert stations[0].name_ja == "中野"
     assert stations[0].lon == pytest.approx(139.66)
 
 
@@ -76,7 +76,7 @@ def test_station_outside_the_23_wards_is_dropped() -> None:
         "type": "FeatureCollection",
         "features": [_station_feature("横浜", "東海道線", 139.66, 35.43)],
     }
-    assert parse_stations(n02, parse_ward_polygons(_N03), {}) == []
+    assert parse_stations(n02, parse_ward_polygons(_N03)) == []
 
 
 def test_same_station_on_multiple_lines_is_merged() -> None:
@@ -87,18 +87,19 @@ def test_same_station_on_multiple_lines_is_merged() -> None:
             _station_feature("中野", "東西線", 139.661, 35.701),
         ],
     }
-    stations = parse_stations(n02, parse_ward_polygons(_N03), {})
+    stations = parse_stations(n02, parse_ward_polygons(_N03))
     assert len(stations) == 1
     assert set(stations[0].lines) == {"中央線", "東西線"}
 
 
-def test_korean_name_falls_back_to_japanese_when_unmapped() -> None:
+def test_station_name_is_kept_in_japanese() -> None:
+    """역명은 일본어 그대로 쓴다 — 사용자가 이 표기로 부동산 사이트를 검색한다."""
     n02 = {
         "type": "FeatureCollection",
         "features": [_station_feature("中野", "中央線", 139.66, 35.70)],
     }
-    stations = parse_stations(n02, parse_ward_polygons(_N03), {})
-    assert stations[0].name_ko == "中野"
+    stations = parse_stations(n02, parse_ward_polygons(_N03))
+    assert stations[0].name_ja == "中野"
 
 
 def test_output_is_sorted_by_id_for_deterministic_diffs() -> None:
@@ -109,5 +110,5 @@ def test_output_is_sorted_by_id_for_deterministic_diffs() -> None:
             _station_feature("新宿", "山手線", 139.70, 35.69),
         ],
     }
-    stations = parse_stations(n02, parse_ward_polygons(_N03), {})
+    stations = parse_stations(n02, parse_ward_polygons(_N03))
     assert [s.id for s in stations] == sorted(s.id for s in stations)

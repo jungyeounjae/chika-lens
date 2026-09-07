@@ -7,7 +7,6 @@ def test_station_is_frozen() -> None:
     station = Station(
         id="nakano",
         name_ja="中野",
-        name_ko="나카노",
         ward="中野区",
         lat=35.7056,
         lon=139.6659,
@@ -22,7 +21,6 @@ def test_station_rejects_coordinates_outside_tokyo() -> None:
         Station(
             id="busan",
             name_ja="釜山",
-            name_ko="부산",
             ward="中野区",
             lat=35.1,
             lon=129.0,

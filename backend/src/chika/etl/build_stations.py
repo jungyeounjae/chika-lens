@@ -35,16 +35,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="국토수치정보에서 역 마스터를 만든다")
     parser.add_argument("--n02", type=Path, required=True, help="N02 철도 GeoJSON")
     parser.add_argument("--n03", type=Path, required=True, help="N03 행정구역 GeoJSON")
-    parser.add_argument("--name-ko", type=Path, default=Path("data/station_name_ko.json"))
     parser.add_argument("--out", type=Path, default=Path("data/stations.json"))
     args = parser.parse_args()
 
     n02 = json.loads(args.n02.read_text(encoding="utf-8"))
     n03 = json.loads(args.n03.read_text(encoding="utf-8"))
-    name_ko = json.loads(args.name_ko.read_text(encoding="utf-8")) if args.name_ko.exists() else {}
 
     wards = [(name, ring) for name, ring in parse_ward_polygons(n03) if name in TOKYO_23_WARDS]
-    stations = parse_stations(n02, wards, name_ko)
+    stations = parse_stations(n02, wards)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(

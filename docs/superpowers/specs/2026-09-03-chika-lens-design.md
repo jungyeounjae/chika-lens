@@ -1,7 +1,9 @@
 # Chika Lens — 도쿄 생활 입지 분석 & 대화형 추천 에이전트
 
 - 작성일: 2026-09-03
-- 상태: 설계 확정 (구현 계획 수립 전)
+- 개정: 2026-09-04 — Places Insights(BigQuery)가 **개인에게 제공 불가**로 거절되어
+  **Places Aggregate API**로 전환. §3, §6.2(지표 12), §8, §9, §10, §11 갱신.
+- 상태: Phase 0 완료, Phase 1 진행 중
 
 ## 1. 배경과 목적
 
@@ -9,7 +11,7 @@
 일본인 기준의 정보만 준다. 한국인에게 실제로 중요한 축(한국 식자재 접근성,
 외국인 임대 난이도, 서울 어느 동네와 비슷한가)은 어디에도 정리되어 있지 않다.
 
-본 프로젝트는 Google Places Insights(BigQuery)와 일본 공공데이터를 결합해
+본 프로젝트는 Google Places Aggregate API와 일본 공공데이터를 결합해
 도쿄 역세권을 정량 평가하고, OpenAI Agents SDK 기반 대화형 에이전트로
 한국인 관점의 지역 추천을 제공한다.
 
@@ -53,27 +55,77 @@
 
 | 소스 | 담당 | 해상도 | 비용 | 접근 |
 |---|---|---|---|---|
-| Places Insights (도쿄 샘플) | 상권·편의·한식당 밀도, 품질 가중 집계 | 역세권 800m | 무료 | 신청·승인 필요 |
+| **Places Aggregate API** | 상권·편의·한식당 밀도, 평점 가중 집계 | 역세권 800m (원/폴리곤 임의) | 월 5천콜 무료 | 결제 계정 + API 키 |
 | MLIT 不動産情報ライブラリ | 시세·지가·학교·의료·재해위험 | 좌표 | 무료 | API 신청 (5영업일) |
 | 도쿄도 통계 | 구별 한국인/외국인 비율 | 구 | 무료 | CSV 다운로드 |
 | Places API (New) | 개별 시설 이름·상세, 한국 식자재점 보완 | 지점 | 월 5천콜 무료 | 즉시 |
 
-### 3.1 Places Insights 제약
+### 3.1 Places Aggregate API — 능력과 제약
 
-- **가게 이름·주소가 스키마에 없다** (`id`, `point`, `types`만). 이름이 필요하면
-  place ID로 Places API를 별도 호출한다. → 추천 화면은 Insights, 상세는 Places API
-- **한국 식자재점 전용 타입이 없다** (`grocery_store`에 섞임). Places API Text Search로
-  1회성 배치 보완
-- **샘플 데이터는 4주 평가 기간**이 있다. 승인 직후 집계 배치를 돌려 인덱스를
-  자체 테이블로 물질화한다. 파생 집계물의 평가 기간 이후 보유 가능 여부는
-  **약관 확인이 필요하며, 확인 전까지 서비스 공개를 하지 않는다**
+Places Insights(BigQuery)를 쓰려 했으나 **개인 신청은 제공 불가**로 거절됐다(2026-09-04).
+Google이 대안으로 제시한 Places Aggregate API로 전환한다.
+
+`computeInsights` 한 번이 "이 영역 안에, 이 타입이고, 이 조건에 맞는 장소가 몇 개인가"에
+답한다.
+
+| 필터 | 값 |
+|---|---|
+| 영역 | 원(중심+반경) / 행정구역(place ID) / 임의 폴리곤 |
+| 타입 | `includedTypes` / `excludedTypes` / `includedPrimaryTypes` (배열) |
+| 영업상태 | `OPERATIONAL` / `PERMANENTLY_CLOSED` / `TEMPORARILY_CLOSED` |
+| 가격대 | `FREE` ~ `VERY_EXPENSIVE` |
+| 평점 | `minRating` / `maxRating` (1.0~5.0) |
+
+응답은 `count`, 그리고 **count가 100 이하이면 `place ID` 목록**까지 준다.
+
+**Insights 대비 잃는 것**
+
+- **속성 필터가 없다.** `good_for_children` 같은 약 70개 속성을 쓸 수 없다.
+  지표 12를 타입 기반으로 교체했다 (§6.2)
+- **자유 SQL이 없다.** H3 그리드 집계, 타입별 일괄 집계 같은 것을 못 한다.
+  필요한 조합마다 콜을 한 번씩 써야 한다
+
+**Insights 대비 얻는 것**
+
+- **4주 평가 기간이 없다.** 이전 설계의 최대 시한 리스크가 사라졌다
+- **BigQuery 의존이 사라진다.** Analytics Hub 구독도, 데이터셋 권한도 불필요
+- **place ID를 영구 보관할 수 있다** (캐싱 제한에서 명시적 면제). 한식당처럼
+  희소한 카테고리는 count ≤ 100이라 실제 place ID가 오므로, "Insights에 이름이
+  없다"는 문제가 구조적으로 해소된다
+- **임의 폴리곤**을 쓸 수 있어, 나중에 원형 800m를 실제 도보권 폴리곤으로
+  바꿀 여지가 생긴다
+
+**남는 제약**
+
+- **한국 식자재점 전용 타입은 여전히 없다** (`grocery_store`에 섞임).
+  Places API Text Search로 1회성 배치 보완 — 이전 설계와 동일
+
+### 3.1.1 비용과 갱신 주기
+
+무료 5,000콜/월(Pro SKU), 분당 1,200콜.
+
+```
+역당 기본 8콜 (지표 1,4,5,6,7,8,9,15)   × 250역 = 2,000콜
+음식점 다양성 8개 타입                    × 250역 = 2,000콜
+                                          합계   ≈ 4,000콜
+```
+
+**월 1회 전체 갱신이 무료 한도 안에 들어간다.** QPM 제한상 최소 4분 소요.
+
+집계 수치의 보관 기한은 Aggregate API 정책 문서가 명시하지 않는다. Maps Platform
+일반 약관의 **30일 캐시 제한**이 적용될 가능성이 높으므로, 인덱스를 **최소 30일마다
+갱신**한다. 월 1회 배치이므로 실무상 제약이 아니다. place ID는 영구 보관 가능하다.
+
+**귀속 표기 의무:** 원시 카운트를 화면에 그대로 노출하면 "Google Maps" 표기가
+필요하다. 다만 우리가 가공한 점수·퍼센타일에는 귀속이 불필요하다 —
+정책상 "Google은 Google Maps 콘텐츠에만 귀속되며 당신의 값에는 아니다".
 
 ### 3.2 해상도 불일치 처리
 
 랭킹 단위는 역세권이지만 국적별 인구 데이터는 구 단위까지만 존재한다.
 같은 구 내 모든 역이 동일 값을 갖게 되므로:
 
-- **주력 신호**: 한국 인프라 밀도 (역세권 해상도, Places Insights)
+- **주력 신호**: 한국 인프라 밀도 (역세권 해상도, Places Aggregate API)
 - **배경 보정**: 구별 한국인 거주 밀도, 구별 외국인 비율 (낮은 가중치)
 - 결과 화면에 "이 지표는 구 단위입니다"를 **명시 표기**한다
 
@@ -91,7 +143,7 @@ application/   유스케이스: RankAreas / ExplainArea / CompareAreas /
 domain/        Station, AreaMetrics, Weights, AreaScore, SearchCriteria
                ScoringService, ValueGapAnalyzer   ← 순수 파이썬, 외부 의존 0
    ↑  (구현)
-infrastructure/ BigQueryAreaRepository, MlitPriceRepository,
+infrastructure/ AggregateAreaRepository, MlitPriceRepository,
                 PlacesApiClient, TokyoStatsLoader
 ```
 
@@ -108,7 +160,7 @@ chika-lens/
 │   │   │   ├── service/     scoring.py, value_gap.py
 │   │   │   └── repository.py
 │   │   ├── application/usecase/
-│   │   ├── infrastructure/  bigquery/, mlit/, places/, stats/
+│   │   ├── infrastructure/  aggregate/, mlit/, places/, stats/, fake/
 │   │   ├── interface/       agent/, api/
 │   │   └── etl/
 │   └── tests/
@@ -173,29 +225,38 @@ Agents SDK 세션 메모리로 `SearchCriteria`를 유지한다. "예산 12만�
 ### 6.1 분석 단위
 
 도쿄 23구 내 철도역 약 250개, 각 역 반경 800m(도보 10분). 역 기준을 택한 이유:
-일본 부동산 검색이 역 기준이고, Places Insights의 `geography_radius` 집계와
+일본 부동산 검색이 역 기준이고, Aggregate API의 `circle` 필터(중심 좌표 + 반경)와
 직접 맞물리며, 사용자가 "나카노역 근처"라고 말한다. 인접 역의 반경이 겹치는 것은
 그대로 둔다 — 실제로 비슷하기 때문이다.
 
 ### 6.2 지표 15개
 
-| # | 지표 | 출처 | 부호 |
-|---|---|---|---|
-| 1 | 한식당 밀도 (평점 4.0+) | Insights | + |
-| 2 | 한국 식자재·미용 시설 | Places API 배치 | + |
-| 3 | 구별 한국 국적 비율 (구 해상도) | 도쿄도 통계 | + |
-| 4 | 슈퍼마켓 밀도 | Insights | + |
-| 5 | 편의점 밀도 | Insights | + |
-| 6 | 의료·약국 접근성 | Insights + MLIT | + |
-| 7 | 카페 밀도 (평점 4.5+) | Insights | + |
-| 8 | 공원 접근성 | Insights + MLIT | + |
-| 9 | 피트니스 (평점 4.5+) | Insights | + |
-| 10 | 음식점 다양성 (`primary_type` 고유 수) | Insights | + |
-| 11 | 보육·교육시설 접근성 | MLIT | + |
-| 12 | `good_for_children` 시설 비율 | Insights | + |
-| 13 | 시세 수준 (역세권 중앙값) | MLIT 거래가격 | − |
-| 14 | 재해위험 (침수·지반) | MLIT | − |
-| 15 | 감점 상권 (창고·정비소·유흥) | Insights | − |
+| # | 키 | 지표 | 출처 | 조회 방법 | 부호 |
+|---|---|---|---|---|---|
+| 1 | `korean_restaurant` | 한식당 밀도 (평점 4.0+) | Aggregate | `korean_restaurant`, `minRating: 4.0` | + |
+| 2 | `korean_grocery` | 한국 식자재·미용 시설 | Places API 배치 | Text Search 1회성 | + |
+| 3 | `korean_resident_ratio` | 구별 한국 국적 비율 (구 해상도) | 도쿄도 통계 | CSV | + |
+| 4 | `supermarket` | 슈퍼마켓 밀도 | Aggregate | `supermarket` | + |
+| 5 | `convenience_store` | 편의점 밀도 | Aggregate | `convenience_store` | + |
+| 6 | `healthcare` | 의료·약국 접근성 | Aggregate | `pharmacy`+`hospital`+`doctor` 한 콜 | + |
+| 7 | `cafe` | 카페 밀도 (평점 4.5+) | Aggregate | `cafe`, `minRating: 4.5` | + |
+| 8 | `park` | 공원 접근성 | Aggregate | `park` | + |
+| 9 | `fitness` | 피트니스 (평점 4.5+) | Aggregate | `gym`, `minRating: 4.5` | + |
+| 10 | `restaurant_variety` | 음식점 다양성 | Aggregate | 요리 타입 8개 각각 1콜, count>0인 타입 수 | + |
+| 11 | `childcare_education` | 보육·교육시설 접근성 | MLIT | — | + |
+| 12 | `child_friendly_venue` | **아이 동반 시설 밀도** | Aggregate | `playground`+`amusement_park`+`zoo`+`aquarium` 한 콜 | + |
+| 13 | `price_level` | 시세 수준 (역세권 중앙값) | MLIT 거래가격 | — | − |
+| 14 | `disaster_risk` | 재해위험 (침수·지반) | MLIT | — | − |
+| 15 | `nuisance_venue` | 감점 상권 | Aggregate | `storage`+`car_repair`+`bar`+`night_club` 한 콜 | − |
+
+**지표 12가 바뀐 이유:** 원래는 `good_for_children` 속성이 붙은 시설의 비율이었으나
+Aggregate API에 속성 필터가 없다. 타입 기반의 "아이 데려갈 곳 밀도"로 대체했고,
+이쪽이 사용자에게 더 직관적이기도 하다 — "아이 동반 가능 표시된 가게 비율"보다
+"놀이터·수족관이 몇 개 있나"가 읽기 쉽다.
+
+**지표 10의 비용 주의:** `includedTypes` 배열은 합계 하나만 돌려주므로 타입별
+분해가 안 된다. 다양성을 세려면 요리 타입마다 콜을 써야 한다. 무료 한도에 맞춰
+대표 8개 타입으로 제한한다.
 
 통근 시간은 지표가 아니라 **하드 필터**다. 상한을 넘는 역은 점수와 무관하게 제외된다.
 
@@ -276,16 +337,19 @@ log(시세중앙값) ~ 지표 1~12, 14, 15
 외부 데이터 승인 대기가 순서를 정해준다. 클린 아키텍처 덕분에
 데이터 없이도 상당 부분을 완성할 수 있다.
 
-| Phase | 내용 | 외부 데이터 |
-|---|---|---|
-| 0 | 도메인 모델 + 스코어링 + 단위 테스트 | 불필요 |
-| 0 | 역 마스터 250개 구축 (국토수치정보 철도데이터) | 불필요 |
-| 0 | Fake 리포지토리로 유스케이스 + 에이전트 골격 | 불필요 |
-| 1 | MLIT API 연동 → 시세·시설·재해 지표 | MLIT 키 (5영업일) |
-| 2 | Places Insights 집계 배치 → 인덱스 물질화 | Insights 승인 |
-| 3 | 가치 갭 회귀 (R² 0.5 게이트) | Phase 1+2 |
-| 4 | Next.js 지도 + SSE 스트리밍 | — |
-| 5 | 배포 | — |
+| Phase | 내용 | 외부 데이터 | 상태 |
+|---|---|---|---|
+| 0 | 도메인 모델 + 스코어링 + 단위 테스트 | 불필요 | ✅ 완료 |
+| 0 | Fake 리포지토리로 유스케이스 + 에이전트 골격 | 불필요 | ✅ 완료 |
+| 1 | 역 마스터 250개 구축 (국토수치정보 철도데이터) | 수동 다운로드 | 진행 중 |
+| 1 | MLIT API 연동 → 시세·시설·재해 지표 | MLIT 키 (승인 대기) | 대기 |
+| 2 | **Aggregate API 집계 배치 → 인덱스 물질화** | 결제 계정 + API 키 | 착수 가능 |
+| 3 | 가치 갭 회귀 (R² 0.5 게이트) | Phase 1+2 | — |
+| 4 | Next.js 지도 + SSE 스트리밍 | — | — |
+| 5 | 배포 | — | — |
+
+**Phase 2가 승인 대기에서 풀렸다.** Aggregate API는 결제 계정과 API 키만 있으면
+즉시 쓸 수 있으므로, MLIT 승인을 기다리지 않고 Phase 1과 병행할 수 있다.
 
 Phase 0 종료 시점에 **가짜 데이터로 에이전트가 대화하고 랭킹을 내놓는 것까지**
 확인된다. 데이터가 들어오면 리포지토리 구현체만 교체한다.
@@ -294,12 +358,12 @@ Phase 0 종료 시점에 **가짜 데이터로 에이전트가 대화하고 랭�
 
 | 구성요소 | 방식 | 이유 |
 |---|---|---|
-| 백엔드 | Cloud Run | BigQuery와 같은 프로젝트, 서비스 계정 인증 단순 |
+| 백엔드 | Cloud Run | Maps Platform과 같은 프로젝트, 시크릿 관리 단순 |
 | 프론트 | Vercel | Next.js 기본값 |
-| ETL 배치 | Cloud Run Jobs + Scheduler (월 1회) | Insights가 월간 갱신 |
+| ETL 배치 | Cloud Run Jobs + Scheduler (월 1회) | 집계 캐시 30일 제한에 맞춘 갱신 |
 | 시크릿 | Secret Manager | OpenAI·MLIT·Maps 키 |
 
-비용: BigQuery 무료 한도(월 1TB 쿼리) 내, Places API 월 5천콜 무료,
+비용: Aggregate API 월 5천콜 무료(전체 갱신 1회 ≈ 4천콜), Places API 월 5천콜 무료,
 Cloud Run 거의 무료. **실질 비용은 OpenAI API뿐**이며 대화당 수 센트 수준이다.
 공개 시 비용이 급증할 수 있으므로 **IP당 rate limit과 일일 상한을 처음부터 넣는다.**
 
@@ -307,16 +371,25 @@ Cloud Run 거의 무료. **실질 비용은 OpenAI API뿐**이며 대화당 수 
 
 | 리스크 | 영향 | 대응 |
 |---|---|---|
-| Places Insights 샘플 승인 거절/지연 | Phase 2 중단 | Phase 0·1을 먼저 완료해 대기 시간 흡수 |
-| 4주 평가 기간 만료 | 데이터 접근 상실 | 승인 즉시 인덱스 물질화. 단 파생물 보유 가능 여부를 약관에서 사전 확인 |
-| 신청 폼의 business email 요구 | 개인 계정 신청 거절 가능 | 도메인 이메일 사용 검토 |
+| ~~Places Insights 승인 거절~~ | — | **실현됨 (2026-09-04)**. Aggregate API로 전환해 해소 |
+| ~~4주 평가 기간 만료~~ | — | Aggregate API에는 평가 기간이 없다. 소멸 |
+| 집계 수치 30일 캐시 제한 | 인덱스 만료 | 월 1회 갱신 배치. 어차피 필요한 주기라 추가 부담 없음 |
+| Aggregate API 콜 수 초과 | 과금 발생 | 역 250개 × 16콜 ≈ 4천콜로 무료 한도 내 설계. 지표 10의 타입 바스켓이 예산 조절 손잡이 |
+| `computeInsights` 과금 단위 불명 | 예산 2배 가능 | 문서에 1콜=1요청인지 명시 없음. 첫 배치 후 청구서로 실측 |
 | 가치 갭 회귀 R² 미달 | 유스케이스 2.2-3 무산 | 0.5 게이트로 자동 비활성화. 다른 기능에 영향 없음 |
 | 구 단위 데이터의 낮은 해상도 | 추천 정확도 저하 | 주력 신호는 역세권 해상도로 확보, 구 단위는 배경 보정 + 화면 명시 |
 | OpenAI 비용 폭주 | 금전 손실 | rate limit + 일일 상한 |
 
 ## 11. 미결 사항
 
-1. **평가 기간 이후 파생 집계물 보유 가능 여부** — Places Insights 약관 확인 필요.
-   확인 전까지 서비스를 외부에 공개하지 않는다
-2. **신청 이메일 선택** — 개인 도메인 vs 회사 도메인
-3. **GCP 프로젝트 확정** — 개인 계정으로 신규 생성 예정, 결제 계정 연결 필요
+1. ~~평가 기간 이후 파생 집계물 보유 가능 여부~~ — **소멸.** Aggregate API에는
+   평가 기간이 없다. 대신 집계 수치에 30일 캐시 제한이 적용될 가능성이 높으므로
+   월 1회 갱신을 전제로 설계했다 (§3.1.1)
+2. ~~신청 이메일 선택~~ — **소멸.** Insights 신청 자체가 없어졌다
+3. **GCP 프로젝트 확정** — 개인 계정으로 신규 생성, **결제 계정 연결 필수**
+   (Aggregate API는 무료 한도 내에서도 결제 계정을 요구한다)
+4. **`computeInsights` 과금 단위** — 1콜=1요청인지 `insights` 배열 항목당인지
+   문서에 명시가 없다. 첫 배치를 소량으로 돌려 청구서로 확인한다
+5. **지표 10의 요리 타입 바스켓 확정** — 8개를 무엇으로 할지. 도쿄 실정과
+   한국인 관점을 함께 반영해야 한다 (예: 일식/중식/이탈리안/인도/태국/
+   패스트푸드/라멘/이자카야)

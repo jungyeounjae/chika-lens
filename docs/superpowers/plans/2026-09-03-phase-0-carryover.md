@@ -1,12 +1,32 @@
 # Phase 0 인수인계 — Phase 1로 넘기는 것들
 
 - 작성일: 2026-09-03
+- 개정: 2026-09-04 — Places Insights 거절에 따른 데이터 소스 전환 반영 (§0)
 - 대상 브랜치: `phase-0-implementation` (main에 병합 완료)
 - 계획: [2026-09-03-chika-lens-phase0.md](2026-09-03-chika-lens-phase0.md)
 - 스펙: [../specs/2026-09-03-chika-lens-design.md](../specs/2026-09-03-chika-lens-design.md)
 
 Phase 0 실행 중 내려진 판정과, 최종 전체 브랜치 리뷰가 Phase 1로 넘긴 항목들이다.
 근거는 git 히스토리에 남아 있고, 이 문서는 "왜 그렇게 됐는지"와 "다음에 뭘 해야 하는지"만 담는다.
+
+## 0. 데이터 소스 전환 (2026-09-04)
+
+**Places Insights(BigQuery) 신청이 "개인에게는 제공 불가"로 거절됐다.**
+Google이 대안으로 제시한 **Places Aggregate API**로 전환한다.
+스펙 §3.1에 상세가 있다.
+
+Phase 계획에 미치는 영향:
+
+- **Phase 2가 승인 대기에서 풀렸다.** 결제 계정과 API 키만 있으면 즉시 착수할 수
+  있으므로 MLIT 승인을 기다릴 필요가 없다. Phase 1과 병행 가능하다.
+- **BigQuery·Analytics Hub가 스택에서 빠진다.** `infrastructure/bigquery/`가 아니라
+  `infrastructure/aggregate/`를 만든다.
+- **4주 평가 기간 리스크가 소멸했다.** 대신 집계 수치에 30일 캐시 제한이 적용될
+  가능성이 높아 월 1회 갱신을 전제한다.
+- **지표 12를 교체했다.** `good_for_children`(속성 필터, Aggregate에 없음) →
+  `child_friendly_venue`(놀이터·유원지·동물원·수족관 밀도). 코드 반영 완료.
+- **place ID를 영구 보관할 수 있다.** count ≤ 100이면 place ID 목록이 오므로,
+  한식당처럼 희소한 카테고리는 이름 해석을 위해 Places API를 매번 부를 필요가 없다.
 
 ## 1. 미충족 종료 기준 (유일)
 

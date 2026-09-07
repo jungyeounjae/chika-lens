@@ -23,7 +23,7 @@ class MetricKey(StrEnum):
     FITNESS = "fitness"                              # 9
     RESTAURANT_VARIETY = "restaurant_variety"        # 10
     CHILDCARE_EDUCATION = "childcare_education"      # 11
-    GOOD_FOR_CHILDREN = "good_for_children"          # 12
+    CHILD_FRIENDLY_VENUE = "child_friendly_venue"    # 12
     PRICE_LEVEL = "price_level"                      # 13 (감점)
     DISASTER_RISK = "disaster_risk"                  # 14 (감점)
     NUISANCE_VENUE = "nuisance_venue"                # 15 (감점)

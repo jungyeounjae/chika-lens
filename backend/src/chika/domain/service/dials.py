@@ -28,7 +28,7 @@ DIAL_TO_METRICS: Mapping[Dial, tuple[MetricKey, ...]] = MappingProxyType(
         ),
         Dial.FAMILY: (
             MetricKey.CHILDCARE_EDUCATION,
-            MetricKey.GOOD_FOR_CHILDREN,
+            MetricKey.CHILD_FRIENDLY_VENUE,
         ),
         Dial.COST_RISK: (
             MetricKey.PRICE_LEVEL,

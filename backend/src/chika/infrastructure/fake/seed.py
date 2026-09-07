@@ -31,7 +31,7 @@ _METRIC_RANGE: dict[MetricKey, tuple[float, float]] = {
     MetricKey.FITNESS: (0.0, 12.0),
     MetricKey.RESTAURANT_VARIETY: (5.0, 70.0),
     MetricKey.CHILDCARE_EDUCATION: (1.0, 30.0),
-    MetricKey.GOOD_FOR_CHILDREN: (0.0, 1.0),
+    MetricKey.CHILD_FRIENDLY_VENUE: (0.0, 12.0),
     MetricKey.PRICE_LEVEL: (80_000.0, 260_000.0),
     MetricKey.DISASTER_RISK: (0.0, 1.0),
     MetricKey.NUISANCE_VENUE: (0.0, 20.0),

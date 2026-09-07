@@ -24,6 +24,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 ENDPOINT = "https://areainsights.googleapis.com/v1:computeInsights"
 
@@ -92,14 +93,18 @@ def compute_insights(
     included_types: list[str],
     min_rating: float | None = None,
     insight: str = "INSIGHT_COUNT",
+    lat: float | None = None,
+    lon: float | None = None,
 ) -> dict[str, object]:
-    """computeInsights 1회. 호출 1건 = 이 함수 1번이다."""
+    """computeInsights 1회. 호출 1건 = 이 함수 1번이다 (2026-09-07 실측)."""
+    center_lat = NAKANO[0] if lat is None else lat
+    center_lon = NAKANO[1] if lon is None else lon
     body: dict[str, object] = {
         "insights": [insight],
         "filter": {
             "locationFilter": {
                 "circle": {
-                    "latLng": {"latitude": NAKANO[0], "longitude": NAKANO[1]},
+                    "latLng": {"latitude": center_lat, "longitude": center_lon},
                     "radius": RADIUS_M,
                 }
             },
@@ -206,6 +211,62 @@ def run_nuisance(key: str) -> int:
     return len(NUISANCE_CANDIDATES)
 
 
+def run_distribution(key: str, metric_names: list[str], sample_size: int) -> int:
+    """실제 역 마스터에서 표본을 뽑아 지표의 변별력을 잰다.
+
+    퍼센타일 정규화는 값이 서로 달라야 의미가 있다. 한 지표가 대부분의 역에서
+    같은 값(특히 0~2 같은 좁은 범위)이면 순위가 동률로 뭉개져 지표가 죽는다.
+    지표 구성을 확정하기 전에 이걸 확인해야, 어댑터를 다 만든 뒤에 스키마를
+    다시 손보는 일을 피할 수 있다.
+    """
+    stations_path = Path("data/stations.json")
+    if not stations_path.exists():
+        sys.exit(f"역 마스터가 없다: {stations_path}")
+    stations = json.loads(stations_path.read_text(encoding="utf-8"))
+
+    # 결정적 등간격 표본. 역 마스터가 id 정렬이라 구·노선이 고루 섞인다.
+    step = max(1, len(stations) // sample_size)
+    sample = stations[::step][:sample_size]
+
+    by_name = {name: (types, rating) for name, types, rating in METRIC_QUERIES}
+    calls = 0
+    for metric_name in metric_names:
+        if metric_name not in by_name:
+            sys.exit(f"알 수 없는 지표: {metric_name} (가능: {', '.join(by_name)})")
+        types, min_rating = by_name[metric_name]
+
+        print(f"\n=== {metric_name} — 표본 {len(sample)}역 ===")
+        print(f"    {'+'.join(types)}" + (f" (평점 {min_rating}+)" if min_rating else ""))
+        counts: list[tuple[str, int]] = []
+        for station in sample:
+            result = compute_insights(
+                key, types, min_rating, lat=station["lat"], lon=station["lon"]
+            )
+            calls += 1
+            counts.append((station["name_ja"], int(str(result.get("count", 0)))))
+
+        values = sorted(c for _, c in counts)
+        distinct = len(set(values))
+        zeros = sum(1 for v in values if v == 0)
+        mode_value = max(set(values), key=values.count)
+        mode_share = 100.0 * values.count(mode_value) / len(values)
+        median = values[len(values) // 2]
+
+        for name, count in sorted(counts, key=lambda kv: -kv[1]):
+            print(f"      {name:<12} {count:>5}")
+        print(f"    최소 {values[0]}  중앙 {median}  최대 {values[-1]}")
+        print(
+            f"    고유값 {distinct}/{len(values)}  0인 역 {zeros}  "
+            f"최빈값 {mode_value}({mode_share:.0f}%)"
+        )
+        verdict = (
+            "변별력 낮음 — 지표 재검토" if distinct <= len(values) // 3 or mode_share >= 40
+            else "변별력 충분"
+        )
+        print(f"    >>> {verdict}")
+    return calls
+
+
 def run_places(key: str) -> int:
     """count <= 100 일 때 place ID가 실제로 오는지 확인한다.
 
@@ -230,10 +291,14 @@ def main() -> None:
     parser.add_argument("--metrics", action="store_true", help="지표별 타입 필터 검증")
     parser.add_argument("--places", action="store_true", help="INSIGHT_PLACES로 place ID 확인")
     parser.add_argument("--nuisance", action="store_true", help="감점 상권 타입별 분해")
+    parser.add_argument(
+        "--distribution", nargs="+", metavar="METRIC", help="지표 변별력 진단 (표본 조회)"
+    )
+    parser.add_argument("--sample", type=int, default=20, help="--distribution 표본 역 수")
     args = parser.parse_args()
 
-    if not (args.smoke or args.metrics or args.places or args.nuisance):
-        parser.error("--smoke / --metrics / --places / --nuisance 중 하나 이상을 지정한다")
+    if not (args.smoke or args.metrics or args.places or args.nuisance or args.distribution):
+        parser.error("--smoke / --metrics / --places / --nuisance / --distribution 중 하나 이상")
 
     key = _api_key()
     calls = 0
@@ -245,6 +310,8 @@ def main() -> None:
         calls += run_places(key)
     if args.nuisance:
         calls += run_nuisance(key)
+    if args.distribution:
+        calls += run_distribution(key, args.distribution, args.sample)
 
     print(f"\n>>> 이 실행이 사용한 computeInsights 호출: {calls}건")
     print(">>> GCP 청구서의 Places Aggregate API 요청 수와 대조하면 과금 단위를 알 수 있다.")

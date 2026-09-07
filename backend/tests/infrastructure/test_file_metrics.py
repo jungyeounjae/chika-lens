@@ -73,3 +73,47 @@ def test_station_coordinates_are_validated(tmp_path: Path) -> None:
     repo = _write(tmp_path, [outside], {})
     with pytest.raises(ValueError, match="outside Tokyo"):
         repo.stations()
+
+
+# --- 구 단위 통계 병합 ---
+
+_WARD_STATS = {"中野区": {"korean_resident_ratio": 0.00853}}
+
+
+def _with_wards(tmp_path: Path, ward_stats: dict | None) -> FileAreaMetricsRepository:
+    sp = tmp_path / "stations.json"
+    mp = tmp_path / "metrics.json"
+    wp = tmp_path / "ward_stats.json"
+    sp.write_text(json.dumps([_STATION], ensure_ascii=False), encoding="utf-8")
+    mp.write_text(json.dumps({"st_a": {"cafe": 12.0}}, ensure_ascii=False), encoding="utf-8")
+    if ward_stats is not None:
+        wp.write_text(json.dumps(ward_stats, ensure_ascii=False), encoding="utf-8")
+    return FileAreaMetricsRepository(sp, mp, wp)
+
+
+def test_ward_statistics_are_merged_by_ward_name(tmp_path: Path) -> None:
+    """지표 3은 구 단위다. 같은 구의 모든 역이 같은 값을 갖는다."""
+    raw = _with_wards(tmp_path, _WARD_STATS).raw_metrics()[0]
+    assert raw.get(MetricKey.KOREAN_RESIDENT_RATIO) == pytest.approx(0.00853)
+    assert raw.get(MetricKey.CAFE) == 12.0
+
+
+def test_a_ward_absent_from_the_stats_stays_missing(tmp_path: Path) -> None:
+    raw = _with_wards(tmp_path, {"新宿区": {"korean_resident_ratio": 0.02}}).raw_metrics()[0]
+    assert raw.get(MetricKey.KOREAN_RESIDENT_RATIO) is None
+
+
+def test_ward_statistics_are_optional(tmp_path: Path) -> None:
+    """구 통계 없이도 나머지 지표로 랭킹은 돌아야 한다."""
+    raw = _with_wards(tmp_path, ward_stats=None).raw_metrics()[0]
+    assert raw.get(MetricKey.KOREAN_RESIDENT_RATIO) is None
+    assert raw.get(MetricKey.CAFE) == 12.0
+
+
+def test_station_level_metrics_win_over_ward_level(tmp_path: Path) -> None:
+    """역 단위 값이 있으면 그쪽이 정확하다. 구 값으로 덮어쓰면 해상도가 떨어진다."""
+    sp, mp, wp = (tmp_path / n for n in ("s.json", "m.json", "w.json"))
+    sp.write_text(json.dumps([_STATION], ensure_ascii=False), encoding="utf-8")
+    mp.write_text(json.dumps({"st_a": {"cafe": 12.0}}, ensure_ascii=False), encoding="utf-8")
+    wp.write_text(json.dumps({"中野区": {"cafe": 999.0}}, ensure_ascii=False), encoding="utf-8")
+    assert FileAreaMetricsRepository(sp, mp, wp).raw_metrics()[0].get(MetricKey.CAFE) == 12.0

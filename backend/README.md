@@ -24,3 +24,18 @@
     uv run python -m chika.etl.build_stations --n02 <N02.geojson> --n03 <N03.geojson>
 
 국토수치정보 GeoJSON은 https://nlftp.mlit.go.jp/ksj/ 에서 수동으로 받는다.
+
+## API 서버 (Phase 4)
+
+    export OPENAI_API_KEY=...
+    uv sync --extra agent --extra api
+    uv run python -m chika.interface.api
+
+`POST /chat` 이 SSE 스트림을 돌려준다 — `tool` / `text` / `done` / `error`.
+툴 결과가 텍스트보다 먼저 나가므로 프론트가 지도를 먼저 그릴 수 있다.
+
+**여기서 처음으로 OpenAI 비용이 발생한다.** IP당 속도 제한(`CHIKA_RATE_PER_MIN`,
+기본 6/분)과 일일 상한(`CHIKA_DAILY_CAP`, 기본 200)이 기본으로 걸려 있고,
+거절된 요청은 에이전트를 돌리지 않는다.
+
+`GET /healthz` 로 남은 일일 예산과 활성 세션 수를 볼 수 있다.

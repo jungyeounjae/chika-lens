@@ -1,0 +1,71 @@
+{
+  "世田谷区": {
+    "korean_resident_ratio": 0.004858
+  },
+  "中央区": {
+    "korean_resident_ratio": 0.01013
+  },
+  "中野区": {
+    "korean_resident_ratio": 0.008528
+  },
+  "北区": {
+    "korean_resident_ratio": 0.007422
+  },
+  "千代田区": {
+    "korean_resident_ratio": 0.007391
+  },
+  "台東区": {
+    "korean_resident_ratio": 0.013208
+  },
+  "品川区": {
+    "korean_resident_ratio": 0.00651
+  },
+  "墨田区": {
+    "korean_resident_ratio": 0.007035
+  },
+  "大田区": {
+    "korean_resident_ratio": 0.005049
+  },
+  "文京区": {
+    "korean_resident_ratio": 0.007338
+  },
+  "新宿区": {
+    "korean_resident_ratio": 0.025811
+  },
+  "杉並区": {
+    "korean_resident_ratio": 0.005031
+  },
+  "板橋区": {
+    "korean_resident_ratio": 0.006707
+  },
+  "江戸川区": {
+    "korean_resident_ratio": 0.005794
+  },
+  "江東区": {
+    "korean_resident_ratio": 0.00847
+  },
+  "渋谷区": {
+    "korean_resident_ratio": 0.008394
+  },
+  "港区": {
+    "korean_resident_ratio": 0.013766
+  },
+  "目黒区": {
+    "korean_resident_ratio": 0.005959
+  },
+  "練馬区": {
+    "korean_resident_ratio": 0.006211
+  },
+  "荒川区": {
+    "korean_resident_ratio": 0.020148
+  },
+  "葛飾区": {
+    "korean_resident_ratio": 0.006973
+  },
+  "豊島区": {
+    "korean_resident_ratio": 0.008574
+  },
+  "足立区": {
+    "korean_resident_ratio": 0.010228
+  }
+}

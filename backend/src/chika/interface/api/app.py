@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 from collections.abc import AsyncIterator, Callable
-from pathlib import Path
 from typing import Protocol
 
 from fastapi import FastAPI, Request
@@ -99,7 +98,7 @@ def _client_ip(request: Request) -> str:
 
 
 def _default_session_factory() -> SessionState:
-    return build_real_session(Path("data/stations.json"), Path("data/metrics.json"))
+    return build_real_session()
 
 
 __all__ = ["AgentRunner", "ChatRequest", "CostGuard", "DailyCapReached", "create_app"]

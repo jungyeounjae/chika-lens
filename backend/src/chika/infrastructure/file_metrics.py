@@ -18,9 +18,15 @@ from chika.domain.model.station import Station
 class FileAreaMetricsRepository:
     """`stations.json` + `metrics.json`을 읽어 `AreaMetricsRepository`를 구현한다."""
 
-    def __init__(self, stations_path: Path, metrics_path: Path) -> None:
+    def __init__(
+        self,
+        stations_path: Path,
+        metrics_path: Path,
+        ward_stats_path: Path | None = None,
+    ) -> None:
         self._stations_path = stations_path
         self._metrics_path = metrics_path
+        self._ward_stats_path = ward_stats_path
 
     def stations(self) -> Sequence[Station]:
         rows = self._load(self._stations_path, "station master")
@@ -43,25 +49,39 @@ class FileAreaMetricsRepository:
         디버깅에 시간을 버리게 된다.
         """
         index = self._load(self._metrics_path, "metrics index")
+        ward_stats = self._load_optional(self._ward_stats_path)
         return [
             RawMetrics(
                 station_id=station.id,
-                values=self._values(index.get(station.id, {})),
+                values=self._values(
+                    ward_stats.get(station.ward, {}),
+                    index.get(station.id, {}),
+                ),
             )
             for station in self.stations()
         ]
 
     @staticmethod
-    def _values(row: dict[str, float]) -> dict[MetricKey, float | None]:
+    def _values(*rows: dict[str, float]) -> dict[MetricKey, float | None]:
+        """뒤에 오는 row가 앞을 덮는다 — 역 단위 값이 구 단위 값보다 정확하다."""
         values: dict[MetricKey, float | None] = dict.fromkeys(MetricKey, None)
-        for name, value in row.items():
-            try:
-                key = MetricKey(name)
-            except ValueError:
-                # 지표 정의가 바뀌어도 옛 인덱스가 로딩을 죽이면 안 된다.
-                continue
-            values[key] = float(value)
+        for row in rows:
+            for name, value in row.items():
+                try:
+                    key = MetricKey(name)
+                except ValueError:
+                    # 지표 정의가 바뀌어도 옛 인덱스가 로딩을 죽이면 안 된다.
+                    continue
+                values[key] = float(value)
         return values
+
+    @staticmethod
+    def _load_optional(path: Path | None) -> dict:  # type: ignore[type-arg]
+        """구 단위 통계는 선택이다 — 없어도 나머지 지표로 랭킹은 돌아야 한다."""
+        if path is None or not path.exists():
+            return {}
+        loaded: dict = json.loads(path.read_text(encoding="utf-8"))  # type: ignore[type-arg]
+        return loaded
 
     @staticmethod
     def _load(path: Path, what: str) -> dict:  # type: ignore[type-arg]

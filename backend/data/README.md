@@ -20,6 +20,25 @@ uv run python -m chika.etl.build_stations \
     --n02 <N02_Station.geojson> --n03 <N03_13.geojson> --out data/stations.json
 ```
 
+## `ward_stats.json` — 구 단위 통계 (커밋함)
+
+`chika.etl.build_ward_stats` 산출물. 지표 3(구별 한국 국적 비율) 23구분.
+
+**출처:** 東京都「区市町村、国籍・地域別外国人人口」および「住民基本台帳による
+世帯と人口」（東京都総務局統計部）。東京都オープンデータ이며 政府標準利用規約에
+따라 출처 표기 조건으로 재배포 가능하다 — 그래서 `metrics.json`과 달리 커밋한다.
+
+원본 CSV 두 개를 수동으로 받아 실행한다:
+
+```bash
+curl -O https://www.toukei.metro.tokyo.lg.jp/gaikoku/2026/ga26ev0300.csv
+curl -O https://www.toukei.metro.tokyo.lg.jp/juukim/2026/jm261v0000_1.csv
+uv run python -m chika.etl.build_ward_stats \
+    --foreign ga26ev0300.csv --population jm261v0000_1.csv
+```
+
+연 1회 갱신이면 충분하다 (원본이 매년 1월 1일 기준).
+
 ## `metrics.json` — 지표 인덱스 (커밋하지 않음)
 
 `chika.etl.build_metrics` 산출물. 489역 × 지표별 원시값.

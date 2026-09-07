@@ -19,63 +19,28 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
 
+from chika.etl.aggregate_batch import effective_type_count
+from chika.etl.aggregate_queries import CORE_QUERIES, CUISINE_BASKET
+
 ENDPOINT = "https://areainsights.googleapis.com/v1:computeInsights"
+
+#: 배치와 같은 정의를 쓴다 — 검증한 것과 실행하는 것이 갈라지지 않게.
+METRIC_QUERIES: list[tuple[str, list[str], float | None]] = [
+    (q.key, list(q.included_types), q.min_rating) for q in CORE_QUERIES
+]
+CUISINE_BASKET_TYPES: list[str] = [q.included_types[0] for q in CUISINE_BASKET]
 
 #: 나카노역. 도쿄 23구 안이면서 번화가와 주택가가 섞여 있어 프로브에 적당하다.
 NAKANO = (35.7056, 139.6659)
 RADIUS_M = 800
 
-#: 스펙 §6.2의 Aggregate 조회 지표. (지표 키, includedTypes, minRating)
-METRIC_QUERIES: list[tuple[str, list[str], float | None]] = [
-    ("korean_restaurant", ["korean_restaurant"], 4.0),
-    ("supermarket", ["supermarket"], None),
-    ("convenience_store", ["convenience_store"], None),
-    ("healthcare", ["pharmacy", "hospital", "doctor"], None),
-    ("cafe", ["cafe"], 4.5),
-    ("park", ["park"], None),
-    ("fitness", ["gym"], 4.5),
-    ("child_friendly_venue", ["playground", "amusement_park", "zoo", "aquarium"], None),
-    ("nuisance_venue", ["storage", "car_repair", "car_wash", "truck_stop"], None),
-]
 
-#: 지표 10(음식점 다양성)의 요리 타입 바스켓.
-#: 점수는 '몇 종류가 있나'가 아니라 '얼마나 고르게 분포하나'다 — 도쿄 역세권은
-#: 대부분 8종이 전부 존재해 종 수로는 변별이 되지 않는다 (나카노 실측 8/8).
-CUISINE_BASKET = [
-    "japanese_restaurant",
-    "chinese_restaurant",
-    "italian_restaurant",
-    "indian_restaurant",
-    "thai_restaurant",
-    "fast_food_restaurant",
-    "ramen_restaurant",
-    "sushi_restaurant",
-]
-
-
-def effective_type_count(counts: list[int]) -> float:
-    """섀넌 엔트로피의 유효 종 수 exp(H).
-
-    '몇 종류가 있나'(존재 종 수)는 도쿄에서 거의 모든 역이 만점이라 변별이 안 된다.
-    한 타입이 압도하면 1에 가깝고, 고르게 분포하면 타입 수에 가까워진다.
-    """
-    total = sum(counts)
-    if total == 0:
-        return 0.0
-    entropy = 0.0
-    for count in counts:
-        if count <= 0:
-            continue
-        share = count / total
-        entropy -= share * math.log(share)
-    return math.exp(entropy)
 
 
 def _api_key() -> str:
@@ -150,9 +115,9 @@ def run_metrics(key: str) -> int:
         rating_note = f" (평점 {min_rating}+)" if min_rating else ""
         print(f"{name:<24} {count:>6}  {'+'.join(types)}{rating_note}")
 
-    print(f"\n=== 음식점 다양성 바스켓 ({len(CUISINE_BASKET)}개 타입) ===")
+    print(f"\n=== 음식점 다양성 바스켓 ({len(CUISINE_BASKET_TYPES)}개 타입) ===")
     counts: list[int] = []
-    for cuisine in CUISINE_BASKET:
+    for cuisine in CUISINE_BASKET_TYPES:
         result = compute_insights(key, [cuisine])
         calls += 1
         count = int(str(result.get("count", 0)))
@@ -163,10 +128,10 @@ def run_metrics(key: str) -> int:
     present = sum(1 for c in counts if c > 0)
     effective = effective_type_count(counts)
     print(f"\n  총 음식점 {total}")
-    print(f"  존재 종 수      {present} / {len(CUISINE_BASKET)}  (포화되어 변별력 없음)")
-    print(f"  유효 종 수      {effective:.2f} / {len(CUISINE_BASKET)}  <- 지표 10 값")
+    print(f"  존재 종 수      {present} / {len(CUISINE_BASKET_TYPES)}  (포화되어 변별력 없음)")
+    print(f"  유효 종 수      {effective:.2f} / {len(CUISINE_BASKET_TYPES)}  <- 지표 10 값")
     if total:
-        top = max(zip(CUISINE_BASKET, counts, strict=True), key=lambda kv: kv[1])
+        top = max(zip(CUISINE_BASKET_TYPES, counts, strict=True), key=lambda kv: kv[1])
         print(f"  최다 타입       {top[0]} {100.0 * top[1] / total:.0f}%")
     return calls
 

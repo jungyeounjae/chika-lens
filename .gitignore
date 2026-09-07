@@ -46,8 +46,11 @@ env/
 Thumbs.db
 
 # BigQuery / GCP
+# 자격증명이 실수로 커밋되는 것을 막는 광범위 규칙.
+# 정당한 데이터 파일은 아래에서 명시적으로 예외 처리한다.
 *.json
 !docs/**/*.json
+!backend/data/*.json
 gcloud-service-key.json
 
 # Node

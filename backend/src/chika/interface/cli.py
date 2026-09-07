@@ -39,6 +39,7 @@ def build_real_session(
     stations_path: Path = Path("data/stations.json"),
     metrics_path: Path = Path("data/metrics.json"),
     ward_stats_path: Path = Path("data/ward_stats.json"),
+    korean_shops_path: Path = Path("data/korean_shops.json"),
 ) -> SessionState:
     """Aggregate 배치가 만든 실제 인덱스로 세션을 구성한다.
 
@@ -46,7 +47,9 @@ def build_real_session(
     아직 없다. 예산·통근 조건을 걸지 않으면 랭킹은 정상 동작하고, 월세는
     화면에 '데이터 없음'으로 나간다. 없는 값을 지어내는 것보다 낫다.
     """
-    areas = FileAreaMetricsRepository(stations_path, metrics_path, ward_stats_path)
+    areas = FileAreaMetricsRepository(
+        stations_path, metrics_path, ward_stats_path, [korean_shops_path]
+    )
     return SessionState(
         usecases=UseCases(
             rank=RankAreas(areas, FakeCommuteRepository({}), FakePriceRepository({})),

@@ -55,6 +55,19 @@ uv run python -m chika.etl.build_metrics --core             # 4,401콜 (월 1회
 uv run python -m chika.etl.build_metrics --diversity        # 3,912콜 (6개월 1회)
 ```
 
+## `korean_shops.json` — 지표 2 (커밋하지 않음)
+
+`chika.etl.build_korean_shops` 산출물. Places API (New) Text Search 결과이므로
+`metrics.json` 과 같이 Google Maps 콘텐츠다 — 커밋하지 않는다.
+
+```bash
+export GOOGLE_MAPS_API_KEY=...
+uv run python -m chika.etl.build_korean_shops --dry-run
+uv run python -m chika.etl.build_korean_shops     # 489콜, 1회성
+```
+
+식자재점 분포는 달마다 바뀌지 않으므로 매월 돌릴 이유가 없다.
+
 ## `.cache/aggregate_progress.jsonl` — 배치 체크포인트 (커밋하지 않음)
 
 조회 한 건마다 append된다. 배치가 중간에 죽어도 같은 명령을 다시 실행하면

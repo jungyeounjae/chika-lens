@@ -55,6 +55,7 @@ Thumbs.db
 # 출처 표기 조건으로 재배포 가능)과 달리 공개 저장소에 올릴 수 없고,
 # 30일 캐시 제한이 적용될 가능성도 있다.
 backend/data/metrics.json
+backend/data/korean_shops.json
 backend/data/.cache/
 gcloud-service-key.json
 

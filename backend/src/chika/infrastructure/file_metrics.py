@@ -23,10 +23,14 @@ class FileAreaMetricsRepository:
         stations_path: Path,
         metrics_path: Path,
         ward_stats_path: Path | None = None,
+        extra_metrics_paths: Sequence[Path] | None = None,
     ) -> None:
         self._stations_path = stations_path
         self._metrics_path = metrics_path
         self._ward_stats_path = ward_stats_path
+        # 배치마다 자기 파일을 소유한다. 갱신 주기가 다른 산출물이 한 파일을
+        # 공유하면 서로 덮어쓴다.
+        self._extra_paths = list(extra_metrics_paths or ())
 
     def stations(self) -> Sequence[Station]:
         rows = self._load(self._stations_path, "station master")
@@ -50,12 +54,14 @@ class FileAreaMetricsRepository:
         """
         index = self._load(self._metrics_path, "metrics index")
         ward_stats = self._load_optional(self._ward_stats_path)
+        extras = [self._load_optional(path) for path in self._extra_paths]
         return [
             RawMetrics(
                 station_id=station.id,
                 values=self._values(
                     ward_stats.get(station.ward, {}),
                     index.get(station.id, {}),
+                    *(extra.get(station.id, {}) for extra in extras),
                 ),
             )
             for station in self.stations()

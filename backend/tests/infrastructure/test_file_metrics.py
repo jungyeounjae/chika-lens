@@ -117,3 +117,33 @@ def test_station_level_metrics_win_over_ward_level(tmp_path: Path) -> None:
     mp.write_text(json.dumps({"st_a": {"cafe": 12.0}}, ensure_ascii=False), encoding="utf-8")
     wp.write_text(json.dumps({"中野区": {"cafe": 999.0}}, ensure_ascii=False), encoding="utf-8")
     assert FileAreaMetricsRepository(sp, mp, wp).raw_metrics()[0].get(MetricKey.CAFE) == 12.0
+
+
+# --- 여러 역 단위 인덱스 병합 ---
+
+
+def test_multiple_station_indexes_are_merged(tmp_path: Path) -> None:
+    """Aggregate 배치와 Text Search 배치가 각자 파일을 소유한다.
+
+    갱신 주기가 다르고(월 1회 vs 1회성) 한 파일을 공유하면 서로 덮어쓴다.
+    """
+    sp, mp, kp = (tmp_path / n for n in ("s.json", "m.json", "k.json"))
+    sp.write_text(json.dumps([_STATION], ensure_ascii=False), encoding="utf-8")
+    mp.write_text(json.dumps({"st_a": {"cafe": 12.0}}, ensure_ascii=False), encoding="utf-8")
+    kp.write_text(
+        json.dumps({"st_a": {"korean_grocery": 7.0}}, ensure_ascii=False), encoding="utf-8"
+    )
+
+    raw = FileAreaMetricsRepository(sp, mp, extra_metrics_paths=[kp]).raw_metrics()[0]
+    assert raw.get(MetricKey.CAFE) == 12.0
+    assert raw.get(MetricKey.KOREAN_GROCERY) == 7.0
+
+
+def test_an_absent_extra_index_is_not_fatal(tmp_path: Path) -> None:
+    sp, mp = (tmp_path / n for n in ("s.json", "m.json"))
+    sp.write_text(json.dumps([_STATION], ensure_ascii=False), encoding="utf-8")
+    mp.write_text(json.dumps({"st_a": {"cafe": 12.0}}, ensure_ascii=False), encoding="utf-8")
+    repo = FileAreaMetricsRepository(sp, mp, extra_metrics_paths=[tmp_path / "nope.json"])
+    raw = repo.raw_metrics()[0]
+    assert raw.get(MetricKey.CAFE) == 12.0
+    assert raw.get(MetricKey.KOREAN_GROCERY) is None

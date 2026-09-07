@@ -127,6 +127,20 @@ Google이 대안으로 제시한 Places Aggregate API로 전환한다.
 
 QPM 1,200 제한상 코어 배치는 최소 4분 소요.
 
+**콜 수 감시:** 결제 보고서는 최대 24시간 지연되지만 Cloud Monitoring의
+`serviceruntime.googleapis.com/api/request_count`는 수 분 내에 반영된다.
+부트스트랩처럼 예산에 근접한 배치를 돌릴 때는 이쪽을 본다.
+
+```bash
+curl -s -G "https://monitoring.googleapis.com/v3/projects/<PROJECT>/timeSeries" \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  --data-urlencode 'filter=metric.type="serviceruntime.googleapis.com/api/request_count" AND resource.labels.service="areainsights.googleapis.com"' \
+  --data-urlencode "interval.startTime=<ISO8601>" \
+  --data-urlencode "interval.endTime=<ISO8601>" \
+  --data-urlencode 'aggregation.alignmentPeriod=86400s' \
+  --data-urlencode 'aggregation.perSeriesAligner=ALIGN_SUM'
+```
+
 집계 수치의 보관 기한은 Aggregate API 정책 문서가 명시하지 않는다. Maps Platform
 일반 약관의 **30일 캐시 제한**이 적용될 가능성이 높으므로, 인덱스를 **최소 30일마다
 갱신**한다. 월 1회 배치이므로 실무상 제약이 아니다. place ID는 영구 보관 가능하다.
@@ -445,7 +459,7 @@ Cloud Run 거의 무료. **실질 비용은 OpenAI API뿐**이며 대화당 수 
 | ~~4주 평가 기간 만료~~ | — | Aggregate API에는 평가 기간이 없다. 소멸 |
 | 집계 수치 30일 캐시 제한 | 인덱스 만료 | 월 1회 갱신 배치. 어차피 필요한 주기라 추가 부담 없음 |
 | Aggregate API 콜 수 초과 | 과금 발생 | 역 250개 × 16콜 ≈ 4천콜로 무료 한도 내 설계. 지표 10의 타입 바스켓이 예산 조절 손잡이 |
-| `computeInsights` 과금 단위 불명 | 예산 2배 가능 | 문서에 1콜=1요청인지 명시 없음. 첫 배치 후 청구서로 실측 |
+| ~~`computeInsights` 과금 단위 불명~~ | — | **실측 완료 (2026-09-07): 1콜 = 1요청.** 44콜 실행 후 Cloud Monitoring이 정확히 44건 보고 |
 | 가치 갭 회귀 R² 미달 | 유스케이스 2.2-3 무산 | 0.5 게이트로 자동 비활성화. 다른 기능에 영향 없음 |
 | 구 단위 데이터의 낮은 해상도 | 추천 정확도 저하 | 주력 신호는 역세권 해상도로 확보, 구 단위는 배경 보정 + 화면 명시 |
 | OpenAI 비용 폭주 | 금전 손실 | rate limit + 일일 상한 |
@@ -458,8 +472,10 @@ Cloud Run 거의 무료. **실질 비용은 OpenAI API뿐**이며 대화당 수 
 2. ~~신청 이메일 선택~~ — **소멸.** Insights 신청 자체가 없어졌다
 3. **GCP 프로젝트 확정** — 개인 계정으로 신규 생성, **결제 계정 연결 필수**
    (Aggregate API는 무료 한도 내에서도 결제 계정을 요구한다)
-4. **`computeInsights` 과금 단위** — 1콜=1요청인지 `insights` 배열 항목당인지
-   문서에 명시가 없다. 첫 배치를 소량으로 돌려 청구서로 확인한다
+4. ~~`computeInsights` 과금 단위~~ — **실측으로 닫음 (2026-09-07).** 44콜을 쓴 뒤
+   Cloud Monitoring이 정확히 44건을 보고했다. `insights` 배열 항목당 과금이
+   아니므로 예산 계산이 그대로 유효하다. (요청 수와 과금 SKU 수가 이론상 다를 수
+   있으나 Places Aggregate는 SKU가 하나뿐이라 1:1로 본다)
 5. ~~지표 10의 요리 타입 바스켓 확정~~ — **확정.** `japanese_restaurant`,
    `chinese_restaurant`, `italian_restaurant`, `indian_restaurant`,
    `thai_restaurant`, `fast_food_restaurant`, `ramen_restaurant`,

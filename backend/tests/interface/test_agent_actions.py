@@ -23,12 +23,11 @@ from chika.interface.agent.state import SessionState, UseCases
 
 
 def _station(
-    station_id: str, name_ko: str | None = None, name_ja: str | None = None
+    station_id: str, name_ja: str | None = None
 ) -> Station:
     return Station(
         id=station_id,
         name_ja=name_ja or station_id,
-        name_ko=name_ko or station_id,
         ward="中野区",
         lat=35.70,
         lon=139.66,
@@ -144,7 +143,7 @@ def test_rank_returns_scores_and_drivers(state: SessionState) -> None:
     result = act_rank_areas(state, limit=3)
     assert len(result["areas"]) == 3
     first = result["areas"][0]
-    assert set(first) >= {"station_id", "name_ko", "ward", "lat", "lon", "score", "top_drivers"}
+    assert set(first) >= {"station_id", "name_ja", "ward", "lat", "lon", "score", "top_drivers"}
     assert 0.0 <= first["score"] <= 100.0
     assert len(first["top_drivers"]) == 3
 
@@ -273,7 +272,7 @@ def test_rank_top_percent_is_100_minus_percentile() -> None:
 
 
 def test_set_criteria_rejects_an_unknown_commute_destination() -> None:
-    stations = [_station("a"), _station("hub", name_ko="중심역", name_ja="中心駅")]
+    stations = [_station("a"), _station("hub", name_ja="中心駅")]
     raws = [_raw("a"), _raw("hub")]
     state = _deterministic_state(stations, raws, commute={("a", "hub"): 10})
 
@@ -289,19 +288,20 @@ def test_set_criteria_rejects_an_unknown_commute_destination() -> None:
     assert state.criteria is None
 
 
-def test_set_criteria_resolves_commute_destination_by_korean_or_japanese_name() -> None:
-    stations = [_station("a"), _station("hub", name_ko="중심역", name_ja="中心駅")]
+def test_set_criteria_resolves_commute_destination_by_station_name() -> None:
+    """LLM은 사용자가 말한 일본어 역명을 넘긴다. 저장되는 것은 해석된 id다."""
+    stations = [_station("a"), _station("hub", name_ja="中心駅")]
     raws = [_raw("a"), _raw("hub")]
 
-    state_ko = _deterministic_state(stations, raws, commute={("a", "hub"): 10})
+    state_id = _deterministic_state(stations, raws, commute={("a", "hub"): 10})
     act_set_criteria(
-        state_ko,
+        state_id,
         korean_life=1.0, daily_convenience=1.0, quality_of_life=1.0,
         family=1.0, cost_risk=1.0,
-        commute_to="중심역", commute_max_minutes=30,
+        commute_to="hub", commute_max_minutes=30,
     )
-    assert state_ko.criteria is not None
-    assert state_ko.criteria.commute_to == "hub"
+    assert state_id.criteria is not None
+    assert state_id.criteria.commute_to == "hub"
 
     state_ja = _deterministic_state(stations, raws, commute={("a", "hub"): 10})
     act_set_criteria(
@@ -318,7 +318,7 @@ def test_resolved_commute_destination_actually_filters_the_ranking() -> None:
     stations = [
         _station("near"),
         _station("far"),
-        _station("hub", name_ko="중심역", name_ja="中心駅"),
+        _station("hub", name_ja="中心駅"),
     ]
     raws = [_raw("near"), _raw("far"), _raw("hub")]
     commute = {("near", "hub"): 10, ("far", "hub"): 55}
@@ -328,7 +328,7 @@ def test_resolved_commute_destination_actually_filters_the_ranking() -> None:
         state,
         korean_life=1.0, daily_convenience=1.0, quality_of_life=1.0,
         family=1.0, cost_risk=1.0,
-        commute_to="중심역", commute_max_minutes=30,
+        commute_to="中心駅", commute_max_minutes=30,
     )
     result = act_rank_areas(state, limit=10)
     ids = {area["station_id"] for area in result["areas"]}

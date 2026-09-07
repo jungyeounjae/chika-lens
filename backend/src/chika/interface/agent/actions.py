@@ -29,7 +29,7 @@ VALUE_GAP_DISCLAIMER = (
 def _resolve_commute_station(commute_to: str, stations: Sequence[Station]) -> Station | None:
     """통근지 이름(한국어/일본어/id)을 역으로 해석한다. 못 찾으면 None."""
     for station in stations:
-        if commute_to in (station.id, station.name_ja, station.name_ko):
+        if commute_to in (station.id, station.name_ja):
             return station
     return None
 
@@ -64,7 +64,7 @@ def act_set_criteria(
             return {
                 "error": "unknown_commute_station",
                 "commute_to": commute_to,
-                "candidates": [s.name_ko for s in known_stations[:5]],
+                "candidates": [s.name_ja for s in known_stations[:5]],
             }
         resolved_commute_to = station.id
 
@@ -130,7 +130,6 @@ def act_rank_areas(state: SessionState, limit: int = 5) -> dict[str, Any]:
         "areas": [
             {
                 "station_id": row.station.id,
-                "name_ko": row.station.name_ko,
                 "name_ja": row.station.name_ja,
                 "ward": row.station.ward,
                 "lat": row.station.lat,
@@ -168,7 +167,7 @@ def act_explain_area(state: SessionState, station_id: str) -> dict[str, Any]:
 
     return {
         "station_id": explanation.station.id,
-        "name_ko": explanation.station.name_ko,
+        "name_ja": explanation.station.name_ja,
         "ward": explanation.station.ward,
         "score": round(explanation.total, 1),
         "rent_yen": explanation.rent_yen,
@@ -190,7 +189,7 @@ def act_compare_areas(state: SessionState, station_ids: Sequence[str]) -> dict[s
 
     return {
         "stations": [
-            {"station_id": s.id, "name_ko": s.name_ko, "ward": s.ward}
+            {"station_id": s.id, "name_ja": s.name_ja, "ward": s.ward}
             for s in comparison.stations
         ],
         "totals": {sid: round(total, 1) for sid, total in comparison.totals.items()},

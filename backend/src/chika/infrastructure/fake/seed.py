@@ -58,7 +58,6 @@ def build_seed(
             Station(
                 id=station_id,
                 name_ja=f"仮駅{index:03d}",
-                name_ko=f"가상역{index:03d}",
                 ward=SEED_WARDS[index % len(SEED_WARDS)],
                 lat=35.65 + rng.uniform(0.0, 0.15),
                 lon=139.62 + rng.uniform(0.0, 0.25),

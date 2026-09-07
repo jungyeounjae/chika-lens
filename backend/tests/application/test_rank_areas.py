@@ -19,7 +19,6 @@ def _station(station_id: str, ward: str = "中野区") -> Station:
     return Station(
         id=station_id,
         name_ja=station_id,
-        name_ko=station_id,
         ward=ward,
         lat=35.70,
         lon=139.66,

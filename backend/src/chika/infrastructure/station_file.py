@@ -22,7 +22,6 @@ class StationFileRepository:
             Station(
                 id=row["id"],
                 name_ja=row["name_ja"],
-                name_ko=row["name_ko"],
                 ward=row["ward"],
                 lat=float(row["lat"]),
                 lon=float(row["lon"]),

@@ -19,7 +19,6 @@ def test_loads_stations_from_json(tmp_path: Path) -> None:
             {
                 "id": "nakano",
                 "name_ja": "中野",
-                "name_ko": "나카노",
                 "ward": "中野区",
                 "lat": 35.7056,
                 "lon": 139.6659,
@@ -30,7 +29,7 @@ def test_loads_stations_from_json(tmp_path: Path) -> None:
     repo = StationFileRepository(path)
     stations = repo.stations()
     assert len(stations) == 1
-    assert stations[0].name_ko == "나카노"
+    assert stations[0].name_ja == "中野"
     assert stations[0].lines == ("中央線",)
 
 

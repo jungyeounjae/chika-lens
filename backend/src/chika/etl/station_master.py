@@ -20,7 +20,7 @@ def slugify_station(name_ja: str) -> str:
     """일본어 역명을 안정적인 ASCII id로 바꾼다.
 
     로마자 변환기를 의존성으로 들이는 대신 해시를 쓴다. id는 사람이 읽는 값이
-    아니라 참조 키이고, 화면에는 name_ja/name_ko가 나간다.
+    아니라 참조 키이고, 화면에는 name_ja가 나간다.
     """
     digest = hashlib.sha1(name_ja.encode("utf-8")).hexdigest()
     return f"st_{digest[:12]}"
@@ -47,7 +47,6 @@ def parse_ward_polygons(n03_geojson: Mapping[str, object]) -> list[Ward]:
 def parse_stations(
     n02_geojson: Mapping[str, object],
     wards: Sequence[Ward],
-    name_ko: Mapping[str, str],
 ) -> list[Station]:
     """N02 역 피처를 역명 기준으로 병합해 Station 목록을 만든다.
 
@@ -96,8 +95,7 @@ def parse_stations(
             Station(
                 id=station_id,
                 name_ja=str(entry["name_ja"]),
-                name_ko=name_ko.get(str(entry["name_ja"]), str(entry["name_ja"])),
-                ward=str(entry["ward"]),
+                    ward=str(entry["ward"]),
                 lat=entry_lat,
                 lon=entry_lon,
                 lines=tuple(sorted(entry_lines)),

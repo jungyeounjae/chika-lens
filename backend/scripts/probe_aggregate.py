@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 import urllib.error
@@ -40,10 +41,12 @@ METRIC_QUERIES: list[tuple[str, list[str], float | None]] = [
     ("park", ["park"], None),
     ("fitness", ["gym"], 4.5),
     ("child_friendly_venue", ["playground", "amusement_park", "zoo", "aquarium"], None),
-    ("nuisance_venue", ["storage", "car_repair", "bar", "night_club"], None),
+    ("nuisance_venue", ["storage", "car_repair", "car_wash", "truck_stop"], None),
 ]
 
-#: 지표 10(음식점 다양성)의 요리 타입 바스켓 후보. count > 0 인 타입 수가 다양성 점수다.
+#: 지표 10(음식점 다양성)의 요리 타입 바스켓.
+#: 점수는 '몇 종류가 있나'가 아니라 '얼마나 고르게 분포하나'다 — 도쿄 역세권은
+#: 대부분 8종이 전부 존재해 종 수로는 변별이 되지 않는다 (나카노 실측 8/8).
 CUISINE_BASKET = [
     "japanese_restaurant",
     "chinese_restaurant",
@@ -54,6 +57,24 @@ CUISINE_BASKET = [
     "ramen_restaurant",
     "sushi_restaurant",
 ]
+
+
+def effective_type_count(counts: list[int]) -> float:
+    """섀넌 엔트로피의 유효 종 수 exp(H).
+
+    '몇 종류가 있나'(존재 종 수)는 도쿄에서 거의 모든 역이 만점이라 변별이 안 된다.
+    한 타입이 압도하면 1에 가깝고, 고르게 분포하면 타입 수에 가까워진다.
+    """
+    total = sum(counts)
+    if total == 0:
+        return 0.0
+    entropy = 0.0
+    for count in counts:
+        if count <= 0:
+            continue
+        share = count / total
+        entropy -= share * math.log(share)
+    return math.exp(entropy)
 
 
 def _api_key() -> str:
@@ -125,16 +146,64 @@ def run_metrics(key: str) -> int:
         print(f"{name:<24} {count:>6}  {'+'.join(types)}{rating_note}")
 
     print(f"\n=== 음식점 다양성 바스켓 ({len(CUISINE_BASKET)}개 타입) ===")
-    present = 0
+    counts: list[int] = []
     for cuisine in CUISINE_BASKET:
         result = compute_insights(key, [cuisine])
         calls += 1
         count = int(str(result.get("count", 0)))
-        if count > 0:
-            present += 1
+        counts.append(count)
         print(f"  {cuisine:<26} {count:>4}")
-    print(f"\n  다양성 점수 = count>0 인 타입 수 = {present} / {len(CUISINE_BASKET)}")
+
+    total = sum(counts)
+    present = sum(1 for c in counts if c > 0)
+    effective = effective_type_count(counts)
+    print(f"\n  총 음식점 {total}")
+    print(f"  존재 종 수      {present} / {len(CUISINE_BASKET)}  (포화되어 변별력 없음)")
+    print(f"  유효 종 수      {effective:.2f} / {len(CUISINE_BASKET)}  <- 지표 10 값")
+    if total:
+        top = max(zip(CUISINE_BASKET, counts, strict=True), key=lambda kv: kv[1])
+        print(f"  최다 타입       {top[0]} {100.0 * top[1] / total:.0f}%")
     return calls
+
+
+#: 감점 상권 후보. 나카노 실측에서 묶음 합계가 382로 나와,
+#: 어느 타입이 지배하는지 분해해 지표 15의 구성을 다시 정하기 위한 목록.
+NUISANCE_CANDIDATES = [
+    "storage",
+    "car_repair",
+    "car_wash",
+    "truck_stop",
+    "bar",
+    "night_club",
+    "casino",
+    "liquor_store",
+]
+
+
+def run_nuisance(key: str) -> int:
+    """지표 15의 구성 진단.
+
+    묶음 합계만으로는 'bar가 압도해서 번화가 점수가 되어버린' 상황을
+    구분할 수 없다. 타입별로 나눠 봐야 감점 지표로 쓸 수 있는지 판단이 선다.
+    """
+    print("=== 감점 상권 분해 — 나카노역 800m ===\n")
+    print(f"{'타입':<20} {'count':>6}")
+    print("-" * 30)
+    counts: dict[str, int] = {}
+    for candidate in NUISANCE_CANDIDATES:
+        result = compute_insights(key, [candidate])
+        count = int(str(result.get("count", 0)))
+        counts[candidate] = count
+        print(f"{candidate:<20} {count:>6}")
+
+    total = sum(counts.values())
+    print(f"\n  합계 {total}")
+    if total:
+        print("\n  구성비:")
+        for name, count in sorted(counts.items(), key=lambda kv: -kv[1]):
+            share = 100.0 * count / total
+            print(f"    {name:<20} {share:>5.1f}%")
+    return len(NUISANCE_CANDIDATES)
 
 
 def run_places(key: str) -> int:
@@ -160,10 +229,11 @@ def main() -> None:
     parser.add_argument("--smoke", action="store_true", help="1콜만 — 키와 API 활성화 확인")
     parser.add_argument("--metrics", action="store_true", help="지표별 타입 필터 검증")
     parser.add_argument("--places", action="store_true", help="INSIGHT_PLACES로 place ID 확인")
+    parser.add_argument("--nuisance", action="store_true", help="감점 상권 타입별 분해")
     args = parser.parse_args()
 
-    if not (args.smoke or args.metrics or args.places):
-        parser.error("--smoke / --metrics / --places 중 하나 이상을 지정한다")
+    if not (args.smoke or args.metrics or args.places or args.nuisance):
+        parser.error("--smoke / --metrics / --places / --nuisance 중 하나 이상을 지정한다")
 
     key = _api_key()
     calls = 0
@@ -173,6 +243,8 @@ def main() -> None:
         calls += run_metrics(key)
     if args.places:
         calls += run_places(key)
+    if args.nuisance:
+        calls += run_nuisance(key)
 
     print(f"\n>>> 이 실행이 사용한 computeInsights 호출: {calls}건")
     print(">>> GCP 청구서의 Places Aggregate API 요청 수와 대조하면 과금 단위를 알 수 있다.")

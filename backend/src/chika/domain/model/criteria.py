@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -18,6 +19,15 @@ class Household(StrEnum):
     SINGLE = "single"
     COUPLE = "couple"
     FAMILY = "family"
+
+
+#: 가구 형태의 사람이 읽는 이름. "신혼부부" 를 couple 로 읽었다는 사실을
+#: 사용자에게 되읽어 줄 때 쓴다.
+HOUSEHOLD_LABELS_KO: Mapping[Household, str] = {
+    Household.SINGLE: "1인 가구",
+    Household.COUPLE: "부부·2인 가구",
+    Household.FAMILY: "아이가 있는 가구",
+}
 
 
 @dataclass(frozen=True)

@@ -1,7 +1,8 @@
 """조건 → 랭킹 → 근거를 한 번 출력하는 데모. OpenAI 키가 필요 없다.
 
-기본은 시드 데이터다. `--real` 을 주면 Aggregate 배치가 만든 실제 인덱스를 읽는다.
-시세·통근은 아직 소스가 없어 비어 있다 — 화면에 '데이터 없음'으로 나간다.
+기본은 시드 데이터다. `--real` 을 주면 배치들이 만든 실제 인덱스를 읽는다.
+월세·통근은 아직 소스가 없어 비어 있다 — 화면에 '데이터 없음'으로 나간다.
+(지표 13 시세는 MLIT 거래가격으로 채워져 있다. 그건 매매 단가라 월세가 아니다.)
 """
 
 from __future__ import annotations
@@ -102,11 +103,12 @@ def run_demo(state: SessionState | None = None, header: str = "시드 데이터"
     print(f"\n[1위 근거] {detail['name_ja']}")
     for item in detail["strengths"]:
         note = " (구 단위 지표)" if item["is_ward_resolution"] else ""
-        print(f"  + {item['metric']}: 상위 {100 - item['percentile']:.0f}%{note}")
+        print(f"  + {item['label']}: 상위 {100 - item['percentile']:.0f}%{note}")
     for item in detail["weaknesses"]:
-        print(f"  - {item['metric']}: 상위 {100 - item['percentile']:.0f}%")
+        print(f"  - {item['label']}: 상위 {100 - item['percentile']:.0f}%")
     if detail["missing_metrics"]:
-        print(f"  ! 데이터 없음: {', '.join(detail['missing_metrics'])}")
+        names = ", ".join(m["label"] for m in detail["missing_metrics"])
+        print(f"  ! 데이터 없음: {names}")
 
 
 def main() -> None:

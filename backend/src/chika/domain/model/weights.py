@@ -20,6 +20,19 @@ class Dial(StrEnum):
     COST_RISK = "cost_risk"
 
 
+#: 다이얼의 사람이 읽는 이름. 조건을 사용자에게 되읽어 줄 때 쓴다.
+#:
+#: 다이얼은 내부 계산 축이지만 **해석 결과는 사용자에게 보여야 한다** —
+#: "신혼부부" 를 무엇으로 읽었는지 밝히지 않으면 사용자가 고칠 수 없다.
+DIAL_LABELS_KO: Mapping[Dial, str] = {
+    Dial.KOREAN_LIFE: "한국 생활",
+    Dial.DAILY_CONVENIENCE: "생활 편의",
+    Dial.QUALITY_OF_LIFE: "생활 환경",
+    Dial.FAMILY: "육아 환경",
+    Dial.COST_RISK: "비용·위험",
+}
+
+
 @dataclass(frozen=True)
 class DialSettings:
     values: Mapping[Dial, float]

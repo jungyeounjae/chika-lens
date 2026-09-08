@@ -49,7 +49,8 @@ def test_metrics_absent_from_the_file_stay_missing(tmp_path: Path) -> None:
         quality_of_life=1.0, family=1.0, cost_risk=1.0,
     )
     result = act_rank_areas(state, limit=1)
-    assert "price_level" in result["areas"][0]["missing_metrics"]
+    keys = {m["metric"] for m in result["areas"][0]["missing_metrics"]}
+    assert "price_level" in keys
 
 
 def test_rent_is_unknown_without_a_price_source(tmp_path: Path) -> None:

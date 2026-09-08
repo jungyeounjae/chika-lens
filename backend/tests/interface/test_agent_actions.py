@@ -457,3 +457,16 @@ def test_lookup_caps_the_match_list(state: SessionState) -> None:
     stations = [_station(f"s{i}", name_ja=f"新宿{i}") for i in range(20)]
     state = _deterministic_state(stations, [_raw(f"s{i}") for i in range(20)])
     assert len(act_lookup_station(state, "新宿")["matches"]) <= 10
+
+
+def test_explain_carries_coordinates_so_the_map_can_pin_it(state: SessionState) -> None:
+    """지도가 rank_areas 에만 반응하면 '이 동네 어때?' 질문에서 화면 절반이 논다.
+
+    explain_area 가 좌표를 주지 않으면 프론트는 핀을 찍을 수 없다.
+    """
+    stations = [_station("a", name_ja="光が丘", ward="練馬区")]
+    state = _deterministic_state(stations, [_raw("a")])
+    act_set_criteria(state, korean_life=1.0)
+    result = act_explain_area(state, "a")
+    assert result["lat"] == pytest.approx(35.70)
+    assert result["lon"] == pytest.approx(139.66)

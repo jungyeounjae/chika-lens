@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { RankedArea } from "@/lib/types";
+import type { MapPin } from "@/lib/types";
 
 const TOKYO_CENTER: [number, number] = [139.7, 35.69];
 
@@ -27,7 +27,7 @@ const OSM_STYLE = {
   layers: [{ id: "osm", type: "raster" as const, source: "osm" }],
 };
 
-export function AreaMap({ areas }: { areas: RankedArea[] }) {
+export function AreaMap({ areas, numbered = true }: { areas: MapPin[]; numbered?: boolean }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
   const markers = useRef<Marker[]>([]);
@@ -61,13 +61,16 @@ export function AreaMap({ areas }: { areas: RankedArea[] }) {
       pin.className =
         "flex h-7 w-7 items-center justify-center rounded-full border-2 " +
         "border-white bg-rose-600 text-xs font-bold text-white shadow-lg";
-      pin.textContent = String(index + 1);
+      // 단일 역 조회에는 순위가 없다 — 번호 대신 점을 찍는다.
+      pin.textContent = numbered ? String(index + 1) : "";
 
       const marker = new maplibregl.Marker({ element: pin })
         .setLngLat([area.lon, area.lat])
         .setPopup(
           new maplibregl.Popup({ offset: 18 }).setText(
-            `${index + 1}. ${area.name_ja} (${area.ward}) ${area.score.toFixed(1)}점`,
+            numbered
+              ? `${index + 1}. ${area.name_ja} (${area.ward}) ${area.score.toFixed(1)}점`
+              : `${area.name_ja} (${area.ward}) ${area.score.toFixed(1)}점`,
           ),
         )
         .addTo(instance);
@@ -76,8 +79,13 @@ export function AreaMap({ areas }: { areas: RankedArea[] }) {
 
     const bounds = new maplibregl.LngLatBounds();
     areas.forEach((area) => bounds.extend([area.lon, area.lat]));
-    instance.fitBounds(bounds, { padding: 80, maxZoom: 14, duration: 600 });
-  }, [areas]);
+    // 핀이 하나면 fitBounds 가 최대 배율까지 당긴다. 동네가 보이는 정도로 둔다.
+    instance.fitBounds(bounds, {
+      padding: 80,
+      maxZoom: areas.length === 1 ? 13.5 : 14,
+      duration: 600,
+    });
+  }, [areas, numbered]);
 
   return <div ref={container} className="h-full w-full" />;
 }

@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { AreaList } from "@/components/AreaList";
+import { ChatMarkdown } from "@/components/ChatMarkdown";
 import { streamChat } from "@/lib/chatStream";
 import type { ExplainedArea, MapPin, NearbyStation, RankedArea } from "@/lib/types";
 
@@ -109,19 +110,24 @@ export default function Home() {
             </div>
           )}
 
-          {turns.map((turn, index) => (
-            <div key={index} className={turn.role === "user" ? "text-right" : ""}>
-              <div
-                className={
-                  turn.role === "user"
-                    ? "inline-block rounded-2xl bg-neutral-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-900"
-                    : "whitespace-pre-wrap text-sm leading-relaxed"
-                }
-              >
-                {turn.text || (busy && index === turns.length - 1 ? "…" : "")}
+          {turns.map((turn, index) => {
+            const placeholder = busy && index === turns.length - 1 ? "…" : "";
+            return (
+              <div key={index} className={turn.role === "user" ? "text-right" : ""}>
+                {/* 사용자 입력은 평문으로 둔다 — 마크다운으로 해석할 이유가 없고,
+                    자기가 쓴 별표가 사라지면 오히려 놀란다. */}
+                {turn.role === "user" ? (
+                  <div className="inline-block whitespace-pre-wrap rounded-2xl bg-neutral-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-900">
+                    {turn.text}
+                  </div>
+                ) : turn.text ? (
+                  <ChatMarkdown text={turn.text} />
+                ) : (
+                  <div className="text-sm leading-relaxed">{placeholder}</div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           <AreaList areas={areas} />
 

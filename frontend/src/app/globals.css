@@ -1,4 +1,7 @@
 @import "tailwindcss";
+/* 어시스턴트 서술이 마크다운이다 (ChatMarkdown). prose 없이는 목록의
+   불릿과 들여쓰기가 Tailwind 리셋에 지워진다. */
+@plugin "@tailwindcss/typography";
 
 :root {
   --background: #ffffff;

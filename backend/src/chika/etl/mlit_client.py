@@ -6,6 +6,9 @@ Aggregate 와 달리 호출당 과금이 없다. 대신 레이트 리밋이 공�
 빈 응답을 성공으로 접지 않는다. 타일에 시설이 없어서 0건인 것과 요청이 잘못돼
 0건인 것은 구분되지 않는데, 후자를 조용히 넘기면 지표가 통째로 결측이 되고도
 로그에는 아무 흔적이 남지 않는다. 그래서 데이터셋 정체를 `_index` 로 대조한다.
+
+XPT001 은 `_index` 를 주지 않아 이 방어가 통하지 않는다. 그 엔드포인트는
+파서가 필드 구성으로 형태를 검증한다 (`mlit_prices.parse_transaction`).
 """
 
 from __future__ import annotations
@@ -17,7 +20,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 
 from chika.etl.mlit_datasets import TILE_ZOOM, MlitDataset
 
@@ -95,11 +98,27 @@ class MlitClient:
         self.calls_made = 0
 
     def features(
-        self, dataset: MlitDataset, x: int, y: int, zoom: int = TILE_ZOOM
+        self,
+        dataset: MlitDataset,
+        x: int,
+        y: int,
+        zoom: int | None = None,
+        params: Mapping[str, str] | None = None,
     ) -> Sequence[dict[str, object]]:
-        """타일 하나의 feature 목록. 호출 1건을 쓴다."""
+        """타일 하나의 feature 목록. 호출 1건을 쓴다.
+
+        `zoom` 을 생략하면 데이터셋이 허용하는 줌을 쓴다 — 엔드포인트마다
+        다르고 벗어나면 400 이다. `params` 는 엔드포인트 고유 파라미터
+        (XPT001 의 `from`/`to` 분기)를 싣는다.
+        """
         query = urllib.parse.urlencode(
-            {"response_format": "geojson", "z": zoom, "x": x, "y": y}
+            {
+                "response_format": "geojson",
+                "z": dataset.zoom if zoom is None else zoom,
+                "x": x,
+                "y": y,
+                **dict(params or {}),
+            }
         )
         url = f"{BASE_URL}{dataset.endpoint}?{query}"
         payload = self._get_with_retry(url)
@@ -112,6 +131,10 @@ class MlitClient:
         return features
 
     def _verify_identity(self, dataset: MlitDataset, feature: object) -> None:
+        if dataset.index_prefix is None:
+            # 이 엔드포인트는 `_index` 를 주지 않는다 (실측). 여기서 검증할 것이
+            # 없으므로 형태 검증은 파서가 맡는다.
+            return
         properties = feature.get("properties", {}) if isinstance(feature, dict) else {}
         index = str(properties.get("_index", "")) if isinstance(properties, dict) else ""
         if not index.startswith(dataset.index_prefix):

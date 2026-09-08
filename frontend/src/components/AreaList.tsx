@@ -1,6 +1,5 @@
 "use client";
 
-import { metricLabel } from "@/lib/metricLabels";
 import type { RankedArea } from "@/lib/types";
 
 const yen = (value: number) => `${value.toLocaleString("ja-JP")}엔`;
@@ -37,7 +36,7 @@ export function AreaList({ areas }: { areas: RankedArea[] }) {
                 className="rounded bg-neutral-100 px-1.5 py-0.5 text-[11px] dark:bg-neutral-800"
                 title={driver.is_ward_resolution ? "이 지표는 구 단위입니다" : undefined}
               >
-                {metricLabel(driver.metric)} 상위 {Math.round(driver.top_percent)}%
+                {driver.label} 상위 {Math.round(driver.top_percent)}%
                 {/* 스펙 §3.2 — 구 단위 지표는 반드시 명시한다 */}
                 {driver.is_ward_resolution && (
                   <span className="ml-1 text-amber-600 dark:text-amber-500">구 단위</span>
@@ -51,7 +50,7 @@ export function AreaList({ areas }: { areas: RankedArea[] }) {
 
           {area.missing_metrics.length > 0 && (
             <p className="mt-1.5 text-[11px] text-neutral-400">
-              데이터 없음: {area.missing_metrics.map(metricLabel).join(", ")}
+              데이터 없음: {area.missing_metrics.map((m) => m.label).join(", ")}
             </p>
           )}
         </li>

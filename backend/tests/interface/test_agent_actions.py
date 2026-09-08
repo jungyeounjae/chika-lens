@@ -180,6 +180,31 @@ def test_explain_marks_ward_resolution_metrics(state: SessionState) -> None:
     assert all(d["is_ward_resolution"] for d in ratios)
 
 
+def test_every_metric_detail_carries_its_unit(state: SessionState) -> None:
+    """단위가 없으면 LLM 이 raw_value 를 전부 개수로 읽는다.
+
+    시세 1,100,000 이 "110만 곳", 한국 국적 비율 3.5 가 "3.5곳"이 된다.
+    """
+    _set_default_criteria(state)
+    ranked = act_rank_areas(state, limit=1)
+    details = act_explain_area(state, ranked["areas"][0]["station_id"])
+    items = details["strengths"] + details["weaknesses"]
+    items += ranked["areas"][0]["top_drivers"]
+    assert items
+    for item in items:
+        assert item["unit"], item
+
+    units = {item["metric"]: item["unit"] for item in items}
+    for metric, expected in (
+        ("price_level", "엔/㎡"),
+        ("korean_resident_ratio", "%"),
+        ("restaurant_variety", "종"),
+        ("park", "곳"),
+    ):
+        if metric in units:
+            assert units[metric] == expected
+
+
 def test_explain_gives_the_total_score_for_a_station_in_the_ranking(
     state: SessionState,
 ) -> None:
@@ -287,7 +312,10 @@ def test_rank_surfaces_missing_metrics_per_station() -> None:
     )
     result = act_rank_areas(state, limit=2)
     by_id = {area["station_id"]: area for area in result["areas"]}
-    assert by_id["a"]["missing_metrics"] == ["healthcare"]
+    # 키만 주면 서술에 내부 키가 새어 나간다 — 이름을 함께 싣는다.
+    assert by_id["a"]["missing_metrics"] == [
+        {"metric": "healthcare", "label": "의료·약국"}
+    ]
     assert by_id["b"]["missing_metrics"] == []
 
 
@@ -532,3 +560,116 @@ def test_explain_surfaces_nearby_stations_for_the_map(state: SessionState) -> No
     assert result["nearby"][0]["distance_m"] > 0
     assert result["nearby"][0]["lat"] == pytest.approx(35.7500)
     assert result["nearby"][0]["lines"] == ["大江戸線"]
+
+
+# --- 페르소나 질문: "大久保는 신혼부부가 살기 좋은 동네야?" ---
+
+
+def _persona_state() -> SessionState:
+    return _deterministic_state(
+        [_station("a"), _station("b"), _station("c")],
+        [_raw("a"), _raw("b"), _raw("c")],
+    )
+
+
+def test_a_household_seeds_the_dials_it_implies(state: SessionState) -> None:
+    """가구 형태를 말하면 침묵한 축이 채워져 점수가 실제로 움직인다.
+
+    이전에는 `household` 가 월세 배수에만 쓰여, 실데이터(월세 없음)에서
+    couple 로 바꿔도 랭킹이 한 칸도 움직이지 않았다.
+    """
+    act_set_criteria(state, household="couple")
+    assert state.criteria is not None
+    assert state.criteria.dials.strength(Dial.FAMILY) > 0
+    assert state.criteria.dials.strength(Dial.DAILY_CONVENIENCE) > 0
+
+
+def test_a_household_does_not_overwrite_a_dial_the_user_set(state: SessionState) -> None:
+    act_set_criteria(state, family=5.0)
+    act_set_criteria(state, household="couple")
+    assert state.criteria is not None
+    assert state.criteria.dials.strength(Dial.FAMILY) == 5.0
+
+
+def test_a_household_keeps_an_earlier_unrelated_dial(state: SessionState) -> None:
+    """"한식당 많은 곳" 다음에 "신혼부부예요" 가 오면 둘 다 반영돼야 한다."""
+    act_set_criteria(state, korean_life=5.0)
+    result = act_set_criteria(state, household="couple")
+    assert state.criteria is not None
+    assert state.criteria.dials.strength(Dial.KOREAN_LIFE) == 5.0
+    labels = {dial["label"] for dial in result["interpretation"]["active_dials"]}
+    assert {"한국 생활", "육아 환경"} <= labels
+
+
+def test_seeding_happens_only_on_the_turn_the_household_is_given(
+    state: SessionState,
+) -> None:
+    """매 턴 채우면 사용자가 다이얼을 0 으로 되돌릴 방법이 없어진다."""
+    act_set_criteria(state, household="single")
+    act_set_criteria(state, korean_life=5.0)
+    assert state.criteria is not None
+    assert state.criteria.dials.strength(Dial.FAMILY) == 0.0
+
+
+def test_the_interpretation_is_readable_not_internal_keys(state: SessionState) -> None:
+    """"신혼부부" 를 무엇으로 읽었는지 밝히지 않으면 사용자가 고칠 수 없다."""
+    interpretation = act_set_criteria(state, household="couple")["interpretation"]
+    assert interpretation["household"] == "부부·2인 가구"
+    assert "보육·교육" in interpretation["focus_metrics"]
+    assert all(dial["label"] != dial["dial"] for dial in interpretation["active_dials"])
+
+
+def test_explain_carries_the_criteria_it_was_computed_with() -> None:
+    """이것이 없으면 에이전트가 "판단할 데이터가 없다"고 답한다."""
+    session = _persona_state()
+    act_set_criteria(session, household="couple")
+    detail = act_explain_area(session, "a")
+    assert detail["criteria"]["household"] == "부부·2인 가구"
+    assert "아이 동반 시설" in detail["criteria"]["focus_metrics"]
+
+
+def test_a_dial_the_household_zeroes_is_absent_from_the_focus() -> None:
+    """1인 가구에서 보육·교육은 가중치 0 이라 근거로 들면 안 된다."""
+    session = _persona_state()
+    act_set_criteria(session, household="single")
+    detail = act_explain_area(session, "a")
+    assert "보육·교육" not in detail["criteria"]["focus_metrics"]
+
+
+def test_a_ratio_metric_is_reported_as_a_percentage() -> None:
+    """실사용에서 "한국 국적 비율 0.025811%" 가 나갔다 — 실제 2.58% 다.
+
+    저장값은 `한국 국적자 / 구 인구` 라 분수인데 단위만 "%" 였다.
+    """
+    session = _deterministic_state(
+        [_station("a"), _station("b")],
+        [
+            _raw("a", korean_resident_ratio=0.025811),
+            _raw("b", korean_resident_ratio=0.004858),
+        ],
+    )
+    act_set_criteria(session, korean_life=5.0)
+    detail = act_explain_area(session, "a")
+    ratio = next(
+        item
+        for item in [*detail["strengths"], *detail["weaknesses"]]
+        if item["metric"] == MetricKey.KOREAN_RESIDENT_RATIO.value
+    )
+    assert ratio["raw_value"] == 2.58
+    assert ratio["unit"] == "%"
+
+
+def test_a_count_metric_is_left_alone() -> None:
+    """환산은 분수 지표에만 적용된다. 공원 68곳이 6800곳이 되면 안 된다."""
+    session = _deterministic_state(
+        [_station("a"), _station("b")],
+        [_raw("a", park=68.0), _raw("b", park=3.0)],
+    )
+    act_set_criteria(session, quality_of_life=5.0)
+    detail = act_explain_area(session, "a")
+    park = next(
+        item
+        for item in [*detail["strengths"], *detail["weaknesses"]]
+        if item["metric"] == MetricKey.PARK.value
+    )
+    assert park["raw_value"] == 68.0

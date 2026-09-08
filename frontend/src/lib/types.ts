@@ -1,7 +1,12 @@
 /** 백엔드 SSE 이벤트. `backend/src/chika/interface/api/events.py` 와 짝을 이룬다. */
 
 export type MetricDriver = {
+  /** 내부 키. 화면에는 label 을 쓴다. */
   metric: string;
+  /** 사람이 읽는 지표 이름. 백엔드 METRIC_LABELS_KO 가 유일한 정의처다. */
+  label: string;
+  /** 원시값의 단위. 전부 개수가 아니다 — "엔/㎡", "%", "종"이 섞여 있다. */
+  unit: string;
   contribution: number;
   percentile: number;
   top_percent: number;
@@ -22,7 +27,13 @@ export type RankedArea = {
   commute_minutes: number | null;
   commute_uncertain?: boolean;
   top_drivers: MetricDriver[];
-  missing_metrics: string[];
+  missing_metrics: MissingMetric[];
+};
+
+/** 결측 지표. 키만 오면 화면과 서술이 다른 이름을 쓰게 된다. */
+export type MissingMetric = {
+  metric: string;
+  label: string;
 };
 
 /** `explain_area` 의 반환. 한 역을 지도에 표시하는 데 필요한 최소 필드. */
@@ -39,7 +50,7 @@ export type ExplainedArea = {
   rent_yen: number | null;
   strengths: MetricDriver[];
   weaknesses: MetricDriver[];
-  missing_metrics: string[];
+  missing_metrics: MissingMetric[];
   nearby: NearbyStation[];
 };
 

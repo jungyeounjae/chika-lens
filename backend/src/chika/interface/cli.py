@@ -1,7 +1,8 @@
 """조건 → 랭킹 → 근거를 한 번 출력하는 데모. OpenAI 키가 필요 없다.
 
-기본은 시드 데이터다. `--real` 을 주면 Aggregate 배치가 만든 실제 인덱스를 읽는다.
-시세·통근은 아직 소스가 없어 비어 있다 — 화면에 '데이터 없음'으로 나간다.
+기본은 시드 데이터다. `--real` 을 주면 배치들이 만든 실제 인덱스를 읽는다.
+월세·통근은 아직 소스가 없어 비어 있다 — 화면에 '데이터 없음'으로 나간다.
+(지표 13 시세는 MLIT 거래가격으로 채워져 있다. 그건 매매 단가라 월세가 아니다.)
 """
 
 from __future__ import annotations
@@ -41,12 +42,17 @@ def build_real_session(
     ward_stats_path: Path = Path("data/ward_stats.json"),
     korean_shops_path: Path = Path("data/korean_shops.json"),
     childcare_path: Path = Path("data/mlit_childcare.json"),
+    prices_path: Path = Path("data/mlit_prices.json"),
 ) -> SessionState:
     """배치들이 만든 실제 인덱스로 세션을 구성한다.
 
-    시세·통근 리포지토리는 빈 Fake다 — 역간 소요시간 테이블과 MLIT 시세
-    어댑터가 아직 없다. 예산·통근 조건을 걸지 않으면 랭킹은 정상 동작하고,
-    월세는 화면에 '데이터 없음'으로 나간다. 없는 값을 지어내는 것보다 낫다.
+    통근 리포지토리는 빈 Fake다 — 역간 소요시간 테이블이 아직 없다. 통근
+    조건을 걸지 않으면 랭킹은 정상 동작한다.
+
+    시세 리포지토리도 빈 Fake다. `prices_path` 가 채우는 것은 **지표 13
+    (매매 ㎡당 단가)**이고 `rent_yen` 이 요구하는 것은 **월세**다 — MLIT
+    거래가격에는 임대가 없다. 둘을 같은 것으로 취급하면 화면에 매매 단가가
+    월세로 표시된다. 월세는 계속 '데이터 없음'으로 나간다.
 
     `childcare_path` 는 마지막에 온다. 뒤에 오는 파일이 앞을 덮으므로 MLIT
     집계가 옛 metrics.json 의 Aggregate 값을 대체한다 — 인덱스를 다시 접기
@@ -56,7 +62,7 @@ def build_real_session(
         stations_path,
         metrics_path,
         ward_stats_path,
-        [korean_shops_path, childcare_path],
+        [korean_shops_path, childcare_path, prices_path],
     )
     return SessionState(
         usecases=UseCases(
@@ -97,11 +103,12 @@ def run_demo(state: SessionState | None = None, header: str = "시드 데이터"
     print(f"\n[1위 근거] {detail['name_ja']}")
     for item in detail["strengths"]:
         note = " (구 단위 지표)" if item["is_ward_resolution"] else ""
-        print(f"  + {item['metric']}: 상위 {100 - item['percentile']:.0f}%{note}")
+        print(f"  + {item['label']}: 상위 {100 - item['percentile']:.0f}%{note}")
     for item in detail["weaknesses"]:
-        print(f"  - {item['metric']}: 상위 {100 - item['percentile']:.0f}%")
+        print(f"  - {item['label']}: 상위 {100 - item['percentile']:.0f}%")
     if detail["missing_metrics"]:
-        print(f"  ! 데이터 없음: {', '.join(detail['missing_metrics'])}")
+        names = ", ".join(m["label"] for m in detail["missing_metrics"])
+        print(f"  ! 데이터 없음: {names}")
 
 
 def main() -> None:

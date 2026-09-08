@@ -5,17 +5,62 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any
 
 from chika.application.usecase.explain_area import MetricDetail
 from chika.application.usecase.rank_areas import RankedArea
-from chika.domain.model.criteria import Household, SearchCriteria
-from chika.domain.model.metrics import WARD_RESOLUTION_METRICS, MetricKey
+from chika.domain.model.criteria import (
+    HOUSEHOLD_LABELS_KO,
+    Household,
+    SearchCriteria,
+)
+from chika.domain.model.metrics import (
+    METRIC_LABELS_KO,
+    METRIC_UNITS,
+    WARD_RESOLUTION_METRICS,
+    MetricKey,
+    display_raw_value,
+)
 from chika.domain.model.station import Station
-from chika.domain.model.weights import Dial, DialSettings
-from chika.domain.service.dials import expand_dials
+from chika.domain.model.weights import DIAL_LABELS_KO, Dial, DialSettings
+from chika.domain.service.dials import DIAL_TO_METRICS, expand_dials
+from chika.domain.service.personas import seed_dials
 from chika.interface.agent.state import SessionState
+
+
+def _missing(keys: Iterable[MetricKey]) -> list[dict[str, str]]:
+    """결측 지표를 키와 이름으로. 키만 주면 서술에 키가 그대로 새어 나간다."""
+    return [
+        {"metric": key.value, "label": METRIC_LABELS_KO[key]} for key in sorted(keys)
+    ]
+
+
+def _interpretation(criteria: SearchCriteria) -> dict[str, Any]:
+    """확정된 조건을 사람이 읽는 말로. 에이전트가 이것을 사용자에게 되읽어 준다.
+
+    "신혼부부" 를 무엇으로 읽었는지 밝히지 않으면 사용자가 고칠 수 없다.
+    프롬프트에 "해석을 설명하라"고만 적으면 LLM 이 해석을 **지어낸다** —
+    실제로 적용된 값을 페이로드로 내려야 서술이 계산과 어긋나지 않는다.
+    """
+    return {
+        "household": HOUSEHOLD_LABELS_KO[criteria.household],
+        # 강도 0 인 축은 "보지 않는다"는 뜻이라 빼고 보낸다.
+        "active_dials": [
+            {"dial": dial.value, "label": DIAL_LABELS_KO[dial], "strength": strength}
+            for dial in Dial
+            if (strength := criteria.dials.strength(dial)) > 0
+        ],
+        "focus_metrics": sorted(
+            {
+                METRIC_LABELS_KO[key]
+                for dial in Dial
+                if criteria.dials.strength(dial) > 0
+                for key in DIAL_TO_METRICS[dial]
+            }
+        ),
+    }
+
 
 #: 한 번에 LLM에 넘기는 역의 상한. 컨텍스트 낭비와 서술 품질 저하를 막는다.
 MAX_RANKING_LIMIT = 10
@@ -89,15 +134,18 @@ def act_set_criteria(
             return given
         return previous.dials.strength(key) if previous else 0.0
 
-    dials = DialSettings(
-        {
-            Dial.KOREAN_LIFE: dial(korean_life, Dial.KOREAN_LIFE),
-            Dial.DAILY_CONVENIENCE: dial(daily_convenience, Dial.DAILY_CONVENIENCE),
-            Dial.QUALITY_OF_LIFE: dial(quality_of_life, Dial.QUALITY_OF_LIFE),
-            Dial.FAMILY: dial(family, Dial.FAMILY),
-            Dial.COST_RISK: dial(cost_risk, Dial.COST_RISK),
-        }
-    )
+    spoken = {
+        Dial.KOREAN_LIFE: dial(korean_life, Dial.KOREAN_LIFE),
+        Dial.DAILY_CONVENIENCE: dial(daily_convenience, Dial.DAILY_CONVENIENCE),
+        Dial.QUALITY_OF_LIFE: dial(quality_of_life, Dial.QUALITY_OF_LIFE),
+        Dial.FAMILY: dial(family, Dial.FAMILY),
+        Dial.COST_RISK: dial(cost_risk, Dial.COST_RISK),
+    }
+    # 가구 형태를 **이번 턴에 말했을 때만** 침묵한 축을 채운다. 매 턴 채우면
+    # 사용자가 다이얼을 0 으로 되돌릴 방법이 없어진다.
+    if household is not None:
+        spoken = seed_dials(household_value, spoken)
+    dials = DialSettings(spoken)
     criteria = SearchCriteria(
         dials=dials,
         commute_to=resolved_commute_to,
@@ -123,6 +171,8 @@ def act_set_criteria(
         "weights": {key.value: round(value, 4) for key, value in weights.items()},
         "budget_yen": budget,
         "household": household_value.value,
+        # 적용된 해석. 서술이 이것과 다르면 계산과 어긋난 것이다.
+        "interpretation": _interpretation(criteria),
     }
 
 
@@ -183,6 +233,9 @@ def act_rank_areas(state: SessionState, limit: int = 5) -> dict[str, Any]:
         percentile = row.percentile[key]
         return {
             "metric": key.value,
+            # 서술에 쓸 이름. 없으면 LLM 이 내부 키를 그대로 노출한다.
+            "label": METRIC_LABELS_KO[key],
+            "unit": METRIC_UNITS[key],
             "contribution": round(contribution, 2),
             "percentile": round(percentile, 1),
             "top_percent": round(100 - percentile, 1),
@@ -205,7 +258,7 @@ def act_rank_areas(state: SessionState, limit: int = 5) -> dict[str, Any]:
                 "top_drivers": [
                     driver(key, value, row) for key, value in row.score.top_drivers(3)
                 ],
-                "missing_metrics": sorted(key.value for key in row.score.missing),
+                "missing_metrics": _missing(row.score.missing),
             }
             for row in ranked
         ]
@@ -241,9 +294,13 @@ def act_explain_area(state: SessionState, station_id: str) -> dict[str, Any]:
     def detail(item: MetricDetail) -> dict[str, Any]:
         return {
             "metric": item.key.value,
+            "label": METRIC_LABELS_KO[item.key],
+            # 단위가 없으면 LLM 이 raw_value 를 전부 개수로 읽는다.
+            "unit": METRIC_UNITS[item.key],
             "percentile": round(item.percentile, 1),
             # 실제 개수. "공원 몇 개야?" 에 답하려면 백분위만으로는 부족하다.
-            "raw_value": item.raw_value,
+            # 분수로 저장된 지표는 %로 옮겨 내보낸다 (`display_raw_value`).
+            "raw_value": display_raw_value(item.key, item.raw_value),
             "contribution": round(item.contribution, 2),
             "is_missing": item.is_missing,
             "is_ward_resolution": item.is_ward_resolution,
@@ -262,9 +319,13 @@ def act_explain_area(state: SessionState, station_id: str) -> dict[str, Any]:
             else {"score_omitted": "no_reference_set"}
         ),
         "rent_yen": explanation.rent_yen,
+        # 이 분해가 어떤 조건으로 계산됐는지. "신혼부부에게 좋아?" 같은 질문은
+        # 이 요약을 근거로 답한다 — 없으면 에이전트가 "판단할 데이터가 없다"고
+        # 답하거나 측정하지 않은 특성을 지어낸다.
+        "criteria": _interpretation(state.criteria),
         "strengths": [detail(item) for item in explanation.strengths],
         "weaknesses": [detail(item) for item in explanation.weaknesses],
-        "missing_metrics": [key.value for key in explanation.missing],
+        "missing_metrics": _missing(explanation.missing),
         # 주변 역. 좌표가 로컬에 있어 API 비용이 0이다 —
         # 역이 하나뿐인 동네와 노선이 겹치는 동네의 차이를 지도가 보여준다.
         "nearby": [
@@ -301,6 +362,7 @@ def act_compare_areas(state: SessionState, station_ids: Sequence[str]) -> dict[s
         "differences": [
             {
                 "metric": diff.key.value,
+                "label": METRIC_LABELS_KO[diff.key],
                 "percentiles": {sid: round(p, 1) for sid, p in diff.percentiles.items()},
                 "spread": round(diff.spread, 1),
             }

@@ -40,15 +40,23 @@ def build_real_session(
     metrics_path: Path = Path("data/metrics.json"),
     ward_stats_path: Path = Path("data/ward_stats.json"),
     korean_shops_path: Path = Path("data/korean_shops.json"),
+    childcare_path: Path = Path("data/mlit_childcare.json"),
 ) -> SessionState:
-    """Aggregate 배치가 만든 실제 인덱스로 세션을 구성한다.
+    """배치들이 만든 실제 인덱스로 세션을 구성한다.
 
-    시세·통근 리포지토리는 빈 Fake다 — MLIT 어댑터와 역간 소요시간 테이블이
-    아직 없다. 예산·통근 조건을 걸지 않으면 랭킹은 정상 동작하고, 월세는
-    화면에 '데이터 없음'으로 나간다. 없는 값을 지어내는 것보다 낫다.
+    시세·통근 리포지토리는 빈 Fake다 — 역간 소요시간 테이블과 MLIT 시세
+    어댑터가 아직 없다. 예산·통근 조건을 걸지 않으면 랭킹은 정상 동작하고,
+    월세는 화면에 '데이터 없음'으로 나간다. 없는 값을 지어내는 것보다 낫다.
+
+    `childcare_path` 는 마지막에 온다. 뒤에 오는 파일이 앞을 덮으므로 MLIT
+    집계가 옛 metrics.json 의 Aggregate 값을 대체한다 — 인덱스를 다시 접기
+    전에도 지표 11 은 MLIT 값으로 나간다.
     """
     areas = FileAreaMetricsRepository(
-        stations_path, metrics_path, ward_stats_path, [korean_shops_path]
+        stations_path,
+        metrics_path,
+        ward_stats_path,
+        [korean_shops_path, childcare_path],
     )
     return SessionState(
         usecases=UseCases(

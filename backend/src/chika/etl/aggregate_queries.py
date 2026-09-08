@@ -21,8 +21,9 @@ class AggregateQuery:
     min_rating: float | None = None
 
 
-#: 코어 지표 10개. 매달 갱신한다 (489역 × 10 = 4,890콜, 무료 한도 5,000 내).
-#: 여유가 110콜뿐이라 프로브 한 번에 넘칠 수 있다 — 배치 전에 사용량을 본다.
+#: 코어 지표 9개. 매달 갱신한다 (489역 × 9 = 4,401콜, 무료 한도 5,000 내).
+#: 지표 11(육아·교육)은 MLIT 로 옮겼다 — `chika.etl.build_childcare` 가 담당한다.
+#: 인가 시설 등록부라 학원이 섞이지 않고, 월 489콜을 돌려받았다 (스펙 §6.2.5).
 CORE_QUERIES: Sequence[AggregateQuery] = (
     AggregateQuery(MetricKey.KOREAN_RESTAURANT, ("korean_restaurant",), 4.0),
     AggregateQuery(MetricKey.SUPERMARKET, ("supermarket",)),
@@ -35,10 +36,6 @@ CORE_QUERIES: Sequence[AggregateQuery] = (
         MetricKey.CHILD_FRIENDLY_VENUE,
         ("playground", "amusement_park", "zoo", "aquarium"),
     ),
-    # 원래 MLIT 담당으로 뒀으나 Aggregate 에 이미 있었다 (스펙 §6.2.5).
-    # `school` 은 학원·어학원까지 잡아 상업지구 점수가 되고,
-    # `child_care_agency` 는 상업지구를 부풀린다 (明治神宮前 11 -> 21).
-    AggregateQuery(MetricKey.CHILDCARE_EDUCATION, ("preschool", "primary_school")),
     # bar·night_club을 뺀 이유는 스펙 §6.2.1에 있다 — 그대로 두면 활기찬
     # 역세권일수록 벌점을 받는다.
     AggregateQuery(

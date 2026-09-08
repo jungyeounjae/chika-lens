@@ -21,6 +21,16 @@ WorkItem = tuple[str, AggregateQuery]
 CountKey = tuple[str, str]
 
 
+def remaining_budget(used_this_month: int) -> int:
+    """이번 달 남은 무료 콜 수.
+
+    `--max-calls` 는 "남은 작업량"만 보고 "이미 쓴 양"을 모른다. 배치를 여러 번
+    돌리면 매번 통과시키고 결국 한도를 넘는다 — 실제로 그렇게 429를 맞았다.
+    사용량은 Cloud Monitoring 에서 조회한다 (스펙 §3.1.1).
+    """
+    return max(0, FREE_TIER_CALLS - used_this_month)
+
+
 class BudgetExceeded(RuntimeError):
     """예산을 넘는 작업을 요청받았다. 콜을 하나도 쓰기 전에 던진다."""
 

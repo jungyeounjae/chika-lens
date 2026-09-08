@@ -9,6 +9,7 @@ import json
 import pytest
 
 from chika.etl.places_text import (
+    COUNTED_TYPE,
     KOREAN_QUERIES,
     TextSearchClient,
     bounding_rectangle,
@@ -63,22 +64,20 @@ def test_search_sends_the_query_and_rectangle() -> None:
     assert body["languageCode"] == "ja"
 
 
-def test_search_requests_only_id_and_type() -> None:
-    """필드 마스크가 과금 티어를 정한다. 이름·좌표를 받으면 상위 SKU가 된다."""
+def test_search_requests_only_the_place_id() -> None:
+    """필드 마스크가 과금 티어를 정한다.
+
+    places.id 만 요청하면 Text Search Essentials (IDs Only) — 무료 무제한이다.
+    이름·좌표·타입을 하나라도 받으면 Pro(월 5,000)로 올라간다.
+    """
     rec = _Recorder([])
     _client(rec).search("韓国食品", 35.7, 139.7)
-    mask = rec.headers[0]["X-Goog-FieldMask"]
-    assert set(mask.split(",")) == {"places.id", "places.primaryType"}
+    assert rec.headers[0]["X-Goog-FieldMask"] == "places.id"
 
 
-def test_search_returns_id_and_type_pairs() -> None:
-    rec = _Recorder([{"id": "p1", "primaryType": "asian_grocery_store"}])
-    assert _client(rec).search("韓国食品", 35.7, 139.7) == [("p1", "asian_grocery_store")]
-
-
-def test_a_place_without_a_type_is_still_counted() -> None:
-    rec = _Recorder([{"id": "p1"}])
-    assert _client(rec).search("q", 35.7, 139.7) == [("p1", "")]
+def test_search_returns_place_ids() -> None:
+    rec = _Recorder([{"id": "p1"}, {"id": "p2"}])
+    assert _client(rec).search("韓国食品", 35.7, 139.7) == ["p1", "p2"]
 
 
 def test_the_api_key_is_masked_in_errors() -> None:
@@ -101,27 +100,27 @@ def test_the_api_key_is_masked_in_errors() -> None:
 
 
 def test_duplicate_place_ids_are_counted_once() -> None:
-    rec = _Recorder(
-        [{"id": "p1", "primaryType": "asian_grocery_store"},
-         {"id": "p1", "primaryType": "asian_grocery_store"},
-         {"id": "p2", "primaryType": "asian_grocery_store"}],
-    )
+    rec = _Recorder([{"id": "p1"}, {"id": "p1"}, {"id": "p2"}])
     assert count_korean_shops(_client(rec), 35.7, 139.7) == 2
 
 
-def test_only_asian_grocery_stores_are_counted() -> None:
-    """상업지구에서 텍스트 검색이 일반 소매점을 무차별로 잡아온다 (스펙 §6.2.3).
-
-    검색어가 이미 '한국'을 강제하므로, 타입 필터는 식자재점이 아닌 것을 걸러낸다.
+def test_the_type_filter_travels_in_the_request_not_the_response() -> None:
+    """응답에서 primaryType 을 보고 거르면 두 가지 손해가 있다:
+    필드 마스크가 Pro 티어로 올라가고, 서버가 20건으로 자른 뒤에 걸러
+    매칭을 잃는다 (실측 신오쿠보 10 -> 16).
     """
-    rec = _Recorder([
-        {"id": "p1", "primaryType": "asian_grocery_store"},
-        {"id": "p2", "primaryType": "korean_restaurant"},
-        {"id": "p3", "primaryType": "shopping_mall"},
-        {"id": "p4", "primaryType": "drugstore"},
-        {"id": "p5", "primaryType": "cosmetics_store"},
-    ])
-    assert count_korean_shops(_client(rec), 35.7, 139.7) == 1
+    rec = _Recorder([{"id": "p1"}])
+    count_korean_shops(_client(rec), 35.7, 139.7)
+    assert rec.bodies[0]["includedType"] == COUNTED_TYPE
+
+
+def test_the_field_mask_stays_on_the_free_tier() -> None:
+    """places.id 만 요청하면 Text Search Essentials (IDs Only) — 무료 무제한.
+    필드를 하나라도 더 넣으면 Pro(월 5,000)로 올라간다.
+    """
+    rec = _Recorder([{"id": "p1"}])
+    count_korean_shops(_client(rec), 35.7, 139.7)
+    assert rec.headers[0]["X-Goog-FieldMask"] == "places.id"
 
 
 def test_an_area_with_nothing_counts_zero() -> None:

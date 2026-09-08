@@ -19,7 +19,10 @@ ENDPOINT = "https://places.googleapis.com/v1/places:searchText"
 
 #: 필드 마스크가 과금 티어를 정한다. id + primaryType 이면 Pro SKU이고
 #: 월 5,000콜이 무료다 (489역 × 2쿼리 = 978콜). 이름·좌표를 받으면 더 비싸진다.
-FIELD_MASK = "places.id,places.primaryType"
+#: `places.id` 만 요청하면 Text Search Essentials (IDs Only) — 무료 무제한이다.
+#: `primaryType` 을 하나 넣는 순간 Pro(월 5,000)로 올라간다.
+#: 타입 필터는 응답이 아니라 **요청 파라미터**(`includedType`)로 건다.
+FIELD_MASK = "places.id"
 
 #: 韓国食材는 韓国食品과 거의 같은 결과를 낸다 — 실측 확인. 콜만 낭비된다.
 #:
@@ -28,13 +31,15 @@ FIELD_MASK = "places.id,places.primaryType"
 #: 느슨하게 매칭해 "한국"과 무관한 소매 밀도를 재게 된다.
 KOREAN_QUERIES: Sequence[str] = ("韓国食品",)
 
-#: 결과 중 이 타입만 센다.
+#: 요청 시점에 서버가 거르게 한다.
 #:
-#: 검색어가 이미 "한국"을 강제하므로, 타입 필터는 식자재점이 아닌 것을 걸러내는
-#: 역할이다. `grocery_store`·`supermarket` 까지 넓히면 한국 상품을 일부 취급할 뿐인
-#: 일반 슈퍼가 섞여 신오쿠보와 우에노가 동점이 된다 — `asian_grocery_store` 만
-#: 쓸 때 신오쿠보 9 > 우에노 7 로 제자리를 찾는다 (스펙 §6.2.3).
-COUNTED_TYPES: frozenset[str] = frozenset({"asian_grocery_store"})
+#: 응답에서 `primaryType` 을 보고 거르면 두 가지 손해가 있다 — 필드 마스크가
+#: Pro 티어로 올라가고, 서버가 20건으로 자른 **뒤에** 거르므로 매칭을 잃는다.
+#: 실측에서 신오쿠보가 10건에서 16건으로 늘었다 (스펙 §6.2.3).
+#:
+#: 검색어가 이미 "한국"을 강제하므로 이 타입 필터는 식자재점이 아닌 것을
+#: 걸러내는 역할이다.
+COUNTED_TYPE = "asian_grocery_store"
 
 _MIN_INTERVAL_SECONDS = 1.0 / 10
 Transport = Callable[[str, bytes, dict[str, str]], bytes]
@@ -80,11 +85,15 @@ class TextSearchClient:
         self._last_call_at = 0.0
         self.calls_made = 0
 
-    def search(self, query: str, lat: float, lon: float) -> list[tuple[str, str]]:
-        """(place id, primaryType) 목록. 한 페이지 상한은 20건이다."""
+    def search(self, query: str, lat: float, lon: float) -> list[str]:
+        """place id 목록. 한 페이지 상한은 20건이다.
+
+        타입 필터를 요청에 실어 서버가 자르기 전에 거르게 한다.
+        """
         self._throttle()
         body = {
             "textQuery": query,
+            "includedType": COUNTED_TYPE,
             "locationRestriction": bounding_rectangle(lat, lon, self._radius),
             "languageCode": "ja",
         }
@@ -106,7 +115,7 @@ class TextSearchClient:
 
         self.calls_made += 1
         places = json.loads(raw.decode("utf-8")).get("places", [])
-        return [(str(p.get("id", "")), str(p.get("primaryType", ""))) for p in places]
+        return [str(p.get("id", "")) for p in places]
 
     def _throttle(self) -> None:
         elapsed = time.monotonic() - self._last_call_at
@@ -122,7 +131,5 @@ def count_korean_shops(client: TextSearchClient, lat: float, lon: float) -> int:
     """
     found: set[str] = set()
     for query in KOREAN_QUERIES:
-        for place_id, primary_type in client.search(query, lat, lon):
-            if place_id and primary_type in COUNTED_TYPES:
-                found.add(place_id)
+        found.update(place_id for place_id in client.search(query, lat, lon) if place_id)
     return len(found)

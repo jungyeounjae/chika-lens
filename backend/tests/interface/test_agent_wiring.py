@@ -18,9 +18,16 @@ def test_intake_owns_only_the_criteria_tool() -> None:
     assert [t.name for t in intake.tools] == ["set_criteria"]
 
 
-def test_analysis_agent_exposes_the_three_analysis_tools() -> None:
+def test_analysis_agent_exposes_the_analysis_tools() -> None:
+    """lookup_station 이 없으면 '히카리가오카 어때?' 같은 질문에 답할 수 없다 —
+    explain_area 는 해시 id 를 요구하는데 이름을 id 로 바꿀 수단이 사라진다."""
     analysis = build_agents().handoffs[0]
-    assert set(t.name for t in analysis.tools) == {"rank_areas", "explain_area", "compare_areas"}
+    assert set(t.name for t in analysis.tools) == {
+        "rank_areas",
+        "lookup_station",
+        "explain_area",
+        "compare_areas",
+    }
 
 
 def test_instructions_carry_the_guardrails() -> None:

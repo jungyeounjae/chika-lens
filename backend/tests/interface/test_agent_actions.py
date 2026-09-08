@@ -16,6 +16,7 @@ from chika.infrastructure.fake.seed import build_seed
 from chika.interface.agent.actions import (
     act_compare_areas,
     act_explain_area,
+    act_lookup_station,
     act_rank_areas,
     act_set_criteria,
 )
@@ -23,12 +24,12 @@ from chika.interface.agent.state import SessionState, UseCases
 
 
 def _station(
-    station_id: str, name_ja: str | None = None
+    station_id: str, name_ja: str | None = None, ward: str = "中野区"
 ) -> Station:
     return Station(
         id=station_id,
         name_ja=name_ja or station_id,
-        ward="中野区",
+        ward=ward,
         lat=35.70,
         lon=139.66,
         lines=(),
@@ -396,3 +397,63 @@ def test_revising_criteria_clears_the_stale_ranking(state: SessionState) -> None
     act_rank_areas(state, limit=3)
     act_set_criteria(state, family=5.0)
     assert state.last_ranking == []
+
+
+# --- 역 이름으로 찾기 ---
+
+
+def test_lookup_finds_a_station_by_japanese_name(state: SessionState) -> None:
+    """실사용에서 드러난 구멍: '히카리가오카 어때?' 에 답할 방법이 없었다.
+
+    explain_area 는 해시 id 를 요구하는데 에이전트는 이름을 id 로 바꿀 수단이
+    없어, 랭킹 상위에 없는 역은 '데이터가 없다'고 답했다.
+    """
+    stations = [_station("a", name_ja="光が丘"), _station("b", name_ja="新宿")]
+    state = _deterministic_state(stations, [_raw("a"), _raw("b")])
+    result = act_lookup_station(state, "光が丘")
+    assert result["matches"][0]["station_id"] == "a"
+    assert result["matches"][0]["name_ja"] == "光が丘"
+
+
+def test_lookup_matches_a_partial_name(state: SessionState) -> None:
+    """사용자는 '히카리가오카'라고 쓰거나 역명 일부만 적는다."""
+    stations = [_station("a", name_ja="光が丘"), _station("b", name_ja="新宿三丁目")]
+    state = _deterministic_state(stations, [_raw("a"), _raw("b")])
+    assert act_lookup_station(state, "新宿")["matches"][0]["station_id"] == "b"
+
+
+def test_lookup_returns_every_candidate_when_ambiguous(state: SessionState) -> None:
+    stations = [
+        _station("a", name_ja="新宿"),
+        _station("b", name_ja="新宿三丁目"),
+        _station("c", name_ja="西新宿"),
+    ]
+    state = _deterministic_state(stations, [_raw("a"), _raw("b"), _raw("c")])
+    assert len(act_lookup_station(state, "新宿")["matches"]) == 3
+
+
+def test_an_exact_match_ranks_first(state: SessionState) -> None:
+    stations = [_station("a", name_ja="新宿三丁目"), _station("b", name_ja="新宿")]
+    state = _deterministic_state(stations, [_raw("a"), _raw("b")])
+    assert act_lookup_station(state, "新宿")["matches"][0]["station_id"] == "b"
+
+
+def test_lookup_of_an_unknown_name_returns_no_matches(state: SessionState) -> None:
+    """0건과 '데이터 없음'은 다르다. 에이전트가 구분할 수 있어야 한다."""
+    stations = [_station("a", name_ja="新宿")]
+    state = _deterministic_state(stations, [_raw("a")])
+    result = act_lookup_station(state, "横浜")
+    assert result["matches"] == []
+    assert "横浜" in result["query"]
+
+
+def test_lookup_carries_the_ward_for_disambiguation(state: SessionState) -> None:
+    stations = [_station("a", name_ja="光が丘", ward="練馬区")]
+    state = _deterministic_state(stations, [_raw("a")])
+    assert act_lookup_station(state, "光が丘")["matches"][0]["ward"] == "練馬区"
+
+
+def test_lookup_caps_the_match_list(state: SessionState) -> None:
+    stations = [_station(f"s{i}", name_ja=f"新宿{i}") for i in range(20)]
+    state = _deterministic_state(stations, [_raw(f"s{i}") for i in range(20)])
+    assert len(act_lookup_station(state, "新宿")["matches"]) <= 10

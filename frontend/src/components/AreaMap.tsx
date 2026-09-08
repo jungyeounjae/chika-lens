@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { MapPin } from "@/lib/types";
+import type { MapPin, NearbyStation } from "@/lib/types";
 
 const TOKYO_CENTER: [number, number] = [139.7, 35.69];
 
@@ -27,7 +27,15 @@ const OSM_STYLE = {
   layers: [{ id: "osm", type: "raster" as const, source: "osm" }],
 };
 
-export function AreaMap({ areas, numbered = true }: { areas: MapPin[]; numbered?: boolean }) {
+export function AreaMap({
+  areas,
+  numbered = true,
+  nearby = [],
+}: {
+  areas: MapPin[];
+  numbered?: boolean;
+  nearby?: NearbyStation[];
+}) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
   const markers = useRef<Marker[]>([]);
@@ -77,15 +85,33 @@ export function AreaMap({ areas, numbered = true }: { areas: MapPin[]; numbered?
       markers.current.push(marker);
     });
 
+    // 주변 역은 작은 회색 점으로. 주역과 구분되어야 "역이 하나뿐"이 읽힌다.
+    nearby.forEach((station) => {
+      const dot = document.createElement("div");
+      dot.className =
+        "h-3 w-3 rounded-full border border-white bg-neutral-500 shadow";
+      const marker = new maplibregl.Marker({ element: dot })
+        .setLngLat([station.lon, station.lat])
+        .setPopup(
+          new maplibregl.Popup({ offset: 10 }).setText(
+            `${station.name_ja} · 약 ${Math.round(station.distance_m / 100) * 100}m` +
+              (station.lines.length ? ` · ${station.lines.join(", ")}` : ""),
+          ),
+        )
+        .addTo(instance);
+      markers.current.push(marker);
+    });
+
     const bounds = new maplibregl.LngLatBounds();
     areas.forEach((area) => bounds.extend([area.lon, area.lat]));
+    nearby.forEach((station) => bounds.extend([station.lon, station.lat]));
     // 핀이 하나면 fitBounds 가 최대 배율까지 당긴다. 동네가 보이는 정도로 둔다.
     instance.fitBounds(bounds, {
       padding: 80,
       maxZoom: areas.length === 1 ? 13.5 : 14,
       duration: 600,
     });
-  }, [areas, numbered]);
+  }, [areas, numbered, nearby]);
 
   return <div ref={container} className="h-full w-full" />;
 }

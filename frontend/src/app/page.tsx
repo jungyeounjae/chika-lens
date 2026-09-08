@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { AreaList } from "@/components/AreaList";
 import { streamChat } from "@/lib/chatStream";
-import type { ExplainedArea, MapPin, RankedArea } from "@/lib/types";
+import type { ExplainedArea, MapPin, NearbyStation, RankedArea } from "@/lib/types";
 
 // maplibre 는 window 를 참조하므로 서버에서 렌더할 수 없다.
 const AreaMap = dynamic(() => import("@/components/AreaMap").then((m) => m.AreaMap), {
@@ -26,6 +26,7 @@ export default function Home() {
   // 특정 역 조회는 랭킹이 아니다 — 순위 번호 없이 한 곳만 찍는다.
   const [pins, setPins] = useState<MapPin[]>([]);
   const [numbered, setNumbered] = useState(true);
+  const [nearby, setNearby] = useState<NearbyStation[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,12 +49,14 @@ export default function Home() {
               setAreas(ranked.areas);
               setPins(ranked.areas);
               setNumbered(true);
+              setNearby([]);
             }
             const single = event.result as Partial<ExplainedArea> | undefined;
             if (single?.station_id && typeof single.lat === "number") {
               setAreas([]);
               setPins([single as ExplainedArea]);
               setNumbered(false);
+              setNearby(single.nearby ?? []);
             }
           } else if (event.kind === "text") {
             setTurns((prev) => {
@@ -81,7 +84,7 @@ export default function Home() {
     <main className="flex h-dvh flex-col md:flex-row">
       {/* 지도 — 모바일에서는 위쪽 40%, 데스크톱에서는 오른쪽 절반 */}
       <section className="h-2/5 shrink-0 md:order-2 md:h-full md:w-1/2">
-        <AreaMap areas={pins} numbered={numbered} />
+        <AreaMap areas={pins} numbered={numbered} nearby={nearby} />
       </section>
 
       <section className="flex min-h-0 flex-1 flex-col border-neutral-200 md:order-1 md:w-1/2 md:border-r dark:border-neutral-800">

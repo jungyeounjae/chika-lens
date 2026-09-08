@@ -470,3 +470,25 @@ def test_explain_carries_coordinates_so_the_map_can_pin_it(state: SessionState) 
     result = act_explain_area(state, "a")
     assert result["lat"] == pytest.approx(35.70)
     assert result["lon"] == pytest.approx(139.66)
+
+
+def test_explain_surfaces_nearby_stations_for_the_map(state: SessionState) -> None:
+    """API 비용 0으로 '역이 하나뿐인 동네'를 지도에서 보여준다."""
+    stations = [
+        _station("center", name_ja="光が丘"),
+        _station("near", name_ja="練馬春日町"),
+    ]
+    stations = [
+        Station(id="center", name_ja="光が丘", ward="練馬区",
+                lat=35.7594, lon=139.6299, lines=("大江戸線",)),
+        Station(id="near", name_ja="練馬春日町", ward="練馬区",
+                lat=35.7500, lon=139.6350, lines=("大江戸線",)),
+    ]
+    state = _deterministic_state(stations, [_raw("center"), _raw("near")])
+    act_set_criteria(state, korean_life=1.0)
+    result = act_explain_area(state, "center")
+
+    assert result["nearby"][0]["name_ja"] == "練馬春日町"
+    assert result["nearby"][0]["distance_m"] > 0
+    assert result["nearby"][0]["lat"] == pytest.approx(35.7500)
+    assert result["nearby"][0]["lines"] == ["大江戸線"]

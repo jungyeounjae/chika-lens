@@ -85,3 +85,62 @@ def test_unknown_station_raises() -> None:
     usecase = _usecase([_station("a")], [_raw("a")], {})
     with pytest.raises(KeyError, match="zzz"):
         usecase.execute("zzz", SearchCriteria(dials=DialSettings.balanced()))
+
+
+# --- 주변 역 (지도 표시용) ---
+
+
+def _at(station_id: str, lat: float, lon: float, lines: tuple[str, ...] = ()) -> Station:
+    return Station(
+        id=station_id, name_ja=station_id, ward="中野区",
+        lat=lat, lon=lon, lines=lines,
+    )
+
+
+def test_nearby_stations_are_ordered_by_distance() -> None:
+    stations = [
+        _at("center", 35.7000, 139.7000),
+        _at("far", 35.7100, 139.7000),   # 약 1.1km
+        _at("near", 35.7020, 139.7000),  # 약 0.2km
+    ]
+    usecase = _usecase(stations, [_raw(s.id) for s in stations], {})
+    result = usecase.execute("center", SearchCriteria(dials=DialSettings.balanced()))
+    assert [n.station.id for n in result.nearby] == ["near", "far"]
+
+
+def test_the_station_itself_is_not_listed_as_nearby() -> None:
+    stations = [_at("center", 35.7000, 139.7000), _at("other", 35.7020, 139.7000)]
+    usecase = _usecase(stations, [_raw(s.id) for s in stations], {})
+    result = usecase.execute("center", SearchCriteria(dials=DialSettings.balanced()))
+    assert "center" not in [n.station.id for n in result.nearby]
+
+
+def test_stations_beyond_the_radius_are_excluded() -> None:
+    """도쿄 반대편 역까지 찍으면 지도가 읽히지 않는다."""
+    stations = [_at("center", 35.7000, 139.7000), _at("far", 35.8000, 139.9000)]
+    usecase = _usecase(stations, [_raw(s.id) for s in stations], {})
+    result = usecase.execute("center", SearchCriteria(dials=DialSettings.balanced()))
+    assert result.nearby == []
+
+
+def test_nearby_carries_the_distance() -> None:
+    stations = [_at("center", 35.7000, 139.7000), _at("near", 35.7020, 139.7000)]
+    usecase = _usecase(stations, [_raw(s.id) for s in stations], {})
+    result = usecase.execute("center", SearchCriteria(dials=DialSettings.balanced()))
+    assert 150 < result.nearby[0].distance_m < 300
+
+
+def test_an_isolated_station_has_no_neighbours() -> None:
+    """히카리가오카처럼 역이 하나뿐인 동네가 지도에서 드러나야 한다."""
+    usecase = _usecase([_at("alone", 35.7000, 139.7000)], [_raw("alone")], {})
+    result = usecase.execute("alone", SearchCriteria(dials=DialSettings.balanced()))
+    assert result.nearby == []
+
+
+def test_the_neighbour_list_is_capped() -> None:
+    stations = [_at("center", 35.7000, 139.7000)] + [
+        _at(f"n{i}", 35.7000 + i * 0.0005, 139.7000) for i in range(20)
+    ]
+    usecase = _usecase(stations, [_raw(s.id) for s in stations], {})
+    result = usecase.execute("center", SearchCriteria(dials=DialSettings.balanced()))
+    assert len(result.nearby) <= 8

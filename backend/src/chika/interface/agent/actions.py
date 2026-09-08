@@ -241,6 +241,20 @@ def act_explain_area(state: SessionState, station_id: str) -> dict[str, Any]:
         "strengths": [detail(item) for item in explanation.strengths],
         "weaknesses": [detail(item) for item in explanation.weaknesses],
         "missing_metrics": [key.value for key in explanation.missing],
+        # 주변 역. 좌표가 로컬에 있어 API 비용이 0이다 —
+        # 역이 하나뿐인 동네와 노선이 겹치는 동네의 차이를 지도가 보여준다.
+        "nearby": [
+            {
+                "station_id": item.station.id,
+                "name_ja": item.station.name_ja,
+                "ward": item.station.ward,
+                "lat": item.station.lat,
+                "lon": item.station.lon,
+                "lines": list(item.station.lines),
+                "distance_m": round(item.distance_m),
+            }
+            for item in explanation.nearby
+        ],
     }
 
 

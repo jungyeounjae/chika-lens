@@ -10,8 +10,9 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# 앵커가 없으면 frontend/src/lib/ 까지 삼킨다. Python 빌드 산출물만 노린다.
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -51,11 +52,15 @@ Thumbs.db
 *.json
 !docs/**/*.json
 !backend/data/*.json
+# 프론트 설정. 이게 없으면 클론해서 npm install 이 되지 않는다.
+!frontend/*.json
 # 지표 인덱스와 체크포인트는 Google Maps 콘텐츠다. stations.json(국토수치정보,
 # 출처 표기 조건으로 재배포 가능)과 달리 공개 저장소에 올릴 수 없고,
 # 30일 캐시 제한이 적용될 가능성도 있다.
 backend/data/metrics.json
 backend/data/korean_shops.json
+# MLIT 취득 데이터. 이용 목적 회신대로 집계값만 쓰고 재배포하지 않는다 (스펙 §3.1.2).
+backend/data/mlit_childcare.json
 backend/data/.cache/
 gcloud-service-key.json
 

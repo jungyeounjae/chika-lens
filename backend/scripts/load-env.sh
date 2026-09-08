@@ -28,11 +28,13 @@ if [ -z "${GOOGLE_MAPS_API_KEY:-}" ]; then
   unset _key_name
 fi
 
-for _v in OPENAI_API_KEY GOOGLE_MAPS_API_KEY; do
-  if [ -n "${!_v:-}" ]; then
-    echo "  $_v: 설정됨 (${#_v} 자 이름, 값 길이 $(eval echo \${#$_v}))"
+# 간접 참조는 eval 로 한다 — zsh 에는 bash 의 ${!var} 가 없다.
+for _v in OPENAI_API_KEY GOOGLE_MAPS_API_KEY MLIT_API_KEY; do
+  _val=$(eval "printf '%s' \"\${$_v:-}\"")
+  if [ -n "$_val" ]; then
+    echo "  $_v: 설정됨 (${#_val} 자)"
   else
     echo "  $_v: 미설정"
   fi
 done
-unset _v _here
+unset _v _val _here

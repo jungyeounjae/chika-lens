@@ -213,12 +213,30 @@ def act_rank_areas(state: SessionState, limit: int = 5) -> dict[str, Any]:
 
 
 def act_explain_area(state: SessionState, station_id: str) -> dict[str, Any]:
+    """한 역을 지표별로 분해한다.
+
+    **종합 점수는 이 역이 방금 만든 랭킹에 있을 때만 넘긴다.**
+
+    종합 점수는 15지표의 가중 평균이라 프로필이 양극단인 동네를 평균으로
+    뭉갠다. 光が丘(공원 백분위 99.2, 카페 9.3)은 균등 다이얼에서 39.9점인데
+    육아 다이얼을 최대로 올려도 40.1점이다 — 다이얼에 거의 반응하지 않으면서
+    "평균 이하"라는 인상만 남긴다. 게다가 지금은 15지표 중 3개가 결측이라
+    점수의 20%가 50.0 자리채움이다.
+
+    랭킹 안에서는 의미가 있다. 그 점수가 순서를 만들었고 비교 대상이 함께
+    있기 때문이다. 반대로 "히카리가오카 육아하기 좋아?" 처럼 비교 기준 없이
+    들어온 질문에서는 기준 없는 절대 점수가 되어 오해만 만든다.
+
+    프롬프트로 "점수를 말하지 마"라고 적는 대신 페이로드에서 뺀다 — 보이면 쓴다.
+    """
     if state.criteria is None:
         return {"error": "criteria_not_set", "message": "먼저 조건을 확정해야 합니다."}
     try:
         explanation = state.usecases.explain.execute(station_id, state.criteria)
     except KeyError:
         return {"error": "unknown_station", "station_id": station_id}
+
+    in_ranking = any(row.station.id == station_id for row in state.last_ranking)
 
     def detail(item: MetricDetail) -> dict[str, Any]:
         return {
@@ -238,7 +256,11 @@ def act_explain_area(state: SessionState, station_id: str) -> dict[str, Any]:
         # 프론트가 지도에 핀을 찍는 재료. 없으면 특정 지역 조회에서 지도가 논다.
         "lat": explanation.station.lat,
         "lon": explanation.station.lon,
-        "score": round(explanation.total, 1),
+        **(
+            {"score": round(explanation.total, 1)}
+            if in_ranking
+            else {"score_omitted": "no_reference_set"}
+        ),
         "rent_yen": explanation.rent_yen,
         "strengths": [detail(item) for item in explanation.strengths],
         "weaknesses": [detail(item) for item in explanation.weaknesses],

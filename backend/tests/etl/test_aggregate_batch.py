@@ -96,7 +96,10 @@ def test_pending_work_is_ordered_by_station_then_query() -> None:
 
 
 def test_pending_work_over_budget_raises_before_spending_anything() -> None:
-    with pytest.raises(BudgetExceeded, match="4,890"):
+    # 콜 수는 코어 쿼리 구성에서 계산한다 — 숫자를 박아두면 지표를 옮길 때마다
+    # 예산 가드와 무관한 이유로 테스트가 깨진다.
+    expected = f"{489 * len(CORE_QUERIES):,}"
+    with pytest.raises(BudgetExceeded, match=expected):
         pending_work(
             [f"st_{i}" for i in range(489)], CORE_QUERIES, done=set(), max_calls=100
         )
@@ -163,7 +166,6 @@ def test_query_keys_cover_every_aggregate_metric() -> None:
         MetricKey.KOREAN_RESTAURANT, MetricKey.SUPERMARKET, MetricKey.CONVENIENCE_STORE,
         MetricKey.HEALTHCARE, MetricKey.CAFE, MetricKey.PARK, MetricKey.FITNESS,
         MetricKey.CHILD_FRIENDLY_VENUE, MetricKey.NUISANCE_VENUE,
-        MetricKey.CHILDCARE_EDUCATION,
     }
     assert covered == expected
 
@@ -179,16 +181,15 @@ def test_aggregate_query_is_frozen() -> None:
         q.key = "y"  # type: ignore[misc]
 
 
-def test_childcare_is_collected_from_aggregate_not_mlit() -> None:
-    """지표 11을 MLIT 담당으로 뒀으나 Google 에 이미 있었다 (스펙 §6.2.5).
+def test_childcare_is_not_collected_from_aggregate() -> None:
+    """지표 11 은 MLIT 인가 시설 등록부가 담당한다 (스펙 §6.2.5).
 
-    preschool + primary_school 만 쓴다. `school` 은 학원·어학원까지 잡아
-    상업지구 점수가 되고, `child_care_agency` 는 상업지구를 부풀린다
-    (明治神宮前 11 -> 21).
+    Google 은 개수만 주고 무엇을 셌는지 알려주지 않는데, 실측해 보니
+    상업지구를 크게 부풀렸다 (馬喰町 MLIT 30 -> Google 48, 虎ノ門 1 -> 9).
+    학원·어학원과 보육 사업자가 섞인 탓이다. 여기로 되돌리면 그 왜곡과
+    월 489콜이 함께 돌아온다.
     """
-    query = next(q for q in CORE_QUERIES if q.key == MetricKey.CHILDCARE_EDUCATION)
-    assert set(query.included_types) == {"preschool", "primary_school"}
-    assert query.min_rating is None
+    assert MetricKey.CHILDCARE_EDUCATION not in {q.key for q in CORE_QUERIES}
 
 
 def test_the_core_batch_stays_within_the_free_tier() -> None:

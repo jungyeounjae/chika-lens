@@ -180,6 +180,46 @@ def test_explain_marks_ward_resolution_metrics(state: SessionState) -> None:
     assert all(d["is_ward_resolution"] for d in ratios)
 
 
+def test_explain_gives_the_total_score_for_a_station_in_the_ranking(
+    state: SessionState,
+) -> None:
+    """랭킹 안에서는 종합 점수가 순서를 만든 근거다 — "왜 여기가 1위야"에 필요하다."""
+    _set_default_criteria(state)
+    ranked = act_rank_areas(state, limit=1)
+    result = act_explain_area(state, ranked["areas"][0]["station_id"])
+    assert result["score"] == ranked["areas"][0]["score"]
+    assert "score_omitted" not in result
+
+
+def test_explain_withholds_the_total_score_when_there_is_no_ranking(
+    state: SessionState,
+) -> None:
+    """비교 기준 없이 한 동네만 물으면 종합 점수는 오해만 만든다.
+
+    光が丘 실측: 균등 다이얼 39.9점, 육아 다이얼을 최대로 올려도 40.1점.
+    다이얼에 반응하지 않으면서 "평균 이하"라는 인상만 남는다. 백분위는 그대로
+    주고 종합 점수만 뺀다 — 프롬프트로 금지하면 결국 쓰게 된다.
+    """
+    _set_default_criteria(state)
+    station_id = state.usecases.rank.known_stations()[0].id
+    result = act_explain_area(state, station_id)
+    assert "score" not in result
+    assert result["score_omitted"] == "no_reference_set"
+    # 근거는 그대로 남아야 한다. 숨기는 것이 아니라 뭉개지 않는 것이다.
+    assert result["strengths"]
+    assert all("percentile" in item for item in result["strengths"])
+    assert all("raw_value" in item for item in result["strengths"])
+
+
+def test_new_criteria_withdraw_a_previously_granted_score(state: SessionState) -> None:
+    """조건이 바뀌면 랭킹이 무효가 된다. 옛 순위를 근거로 점수를 계속 주면 안 된다."""
+    _set_default_criteria(state)
+    station_id = act_rank_areas(state, limit=1)["areas"][0]["station_id"]
+    assert "score" in act_explain_area(state, station_id)
+    act_set_criteria(state, korean_life=5.0)
+    assert "score" not in act_explain_area(state, station_id)
+
+
 def test_explain_of_unknown_station_returns_an_error_not_an_exception(state: SessionState) -> None:
     _set_default_criteria(state)
     result = act_explain_area(state, "no_such_station")

@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { AreaList } from "@/components/AreaList";
 import { streamChat } from "@/lib/chatStream";
-import type { RankedArea } from "@/lib/types";
+import type { ExplainedArea, MapPin, RankedArea } from "@/lib/types";
 
 // maplibre 는 window 를 참조하므로 서버에서 렌더할 수 없다.
 const AreaMap = dynamic(() => import("@/components/AreaMap").then((m) => m.AreaMap), {
@@ -23,6 +23,9 @@ const EXAMPLES = [
 export default function Home() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [areas, setAreas] = useState<RankedArea[]>([]);
+  // 특정 역 조회는 랭킹이 아니다 — 순위 번호 없이 한 곳만 찍는다.
+  const [pins, setPins] = useState<MapPin[]>([]);
+  const [numbered, setNumbered] = useState(true);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,8 +43,18 @@ export default function Home() {
         for await (const event of streamChat(sessionId.current, message)) {
           if (event.kind === "tool") {
             // 스펙 §5.4 — 툴 결과가 먼저 오므로 지도를 서술보다 먼저 그린다.
-            const result = event.result as { areas?: RankedArea[] } | undefined;
-            if (result?.areas) setAreas(result.areas);
+            const ranked = event.result as { areas?: RankedArea[] } | undefined;
+            if (ranked?.areas) {
+              setAreas(ranked.areas);
+              setPins(ranked.areas);
+              setNumbered(true);
+            }
+            const single = event.result as Partial<ExplainedArea> | undefined;
+            if (single?.station_id && typeof single.lat === "number") {
+              setAreas([]);
+              setPins([single as ExplainedArea]);
+              setNumbered(false);
+            }
           } else if (event.kind === "text") {
             setTurns((prev) => {
               const next = [...prev];
@@ -68,7 +81,7 @@ export default function Home() {
     <main className="flex h-dvh flex-col md:flex-row">
       {/* 지도 — 모바일에서는 위쪽 40%, 데스크톱에서는 오른쪽 절반 */}
       <section className="h-2/5 shrink-0 md:order-2 md:h-full md:w-1/2">
-        <AreaMap areas={areas} />
+        <AreaMap areas={pins} numbered={numbered} />
       </section>
 
       <section className="flex min-h-0 flex-1 flex-col border-neutral-200 md:order-1 md:w-1/2 md:border-r dark:border-neutral-800">
@@ -126,6 +139,13 @@ export default function Home() {
           <input
             value={input}
             onChange={(event) => setInput(event.target.value)}
+            // IME 조합 중 Enter 는 한자·한글 변환 확정이지 전송이 아니다.
+            // 막지 않으면 일본어·한국어 입력에서 문장이 도중에 잘려 나간다.
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && event.nativeEvent.isComposing) {
+                event.preventDefault();
+              }
+            }}
             placeholder="어떤 곳을 찾으세요?"
             disabled={busy}
             className="min-w-0 flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-900"

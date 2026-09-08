@@ -233,6 +233,9 @@ def act_explain_area(state: SessionState, station_id: str) -> dict[str, Any]:
         "station_id": explanation.station.id,
         "name_ja": explanation.station.name_ja,
         "ward": explanation.station.ward,
+        # 프론트가 지도에 핀을 찍는 재료. 없으면 특정 지역 조회에서 지도가 논다.
+        "lat": explanation.station.lat,
+        "lon": explanation.station.lon,
         "score": round(explanation.total, 1),
         "rent_yen": explanation.rent_yen,
         "strengths": [detail(item) for item in explanation.strengths],

@@ -5,7 +5,13 @@ from __future__ import annotations
 from agents import Agent
 
 from chika.interface.agent.state import SessionState
-from chika.interface.agent.tools import compare_areas, explain_area, rank_areas, set_criteria
+from chika.interface.agent.tools import (
+    compare_areas,
+    explain_area,
+    lookup_station,
+    rank_areas,
+    set_criteria,
+)
 
 _INTAKE_INSTRUCTIONS = """\
 당신은 도쿄 거주 한국인의 "어디 살까"를 돕는 상담자입니다. 한국어로 답합니다.
@@ -62,8 +68,22 @@ _ANALYSIS_INSTRUCTIONS = """\
    예: "北千住"를 "기타센주"로 바꾸지 않습니다. 설명 문장은 한국어로 쓰되
    역명만 일본어 그대로 둡니다.
 
-흐름: rank_areas로 후보를 얻고, 사용자가 특정 역을 물으면 explain_area,
-둘 이상을 비교하면 compare_areas를 씁니다.
+흐름:
+- 조건으로 추천을 요청하면 rank_areas
+- **특정 역·동네를 이름으로 물으면 lookup_station 으로 station_id 를 먼저 찾고,
+  그 id 로 explain_area 를 부릅니다.** 랭킹 상위에 없다고 해서 데이터가 없는
+  것이 아닙니다 — 489개 역 전부에 지표가 있습니다.
+
+  **lookup_station 에는 반드시 일본어 표기를 넘깁니다.** 역 마스터가 일본어로
+  되어 있어 한글 음차로는 찾지 못합니다. 사용자가 한글로 말하면 당신이
+  일본어로 바꿔서 넘기세요:
+    "히카리가오카" -> "光が丘",  "기치조지" -> "吉祥寺",
+    "신오쿠보" -> "新大久保",   "나카노" -> "中野"
+  0건이 나오면 **표기를 바꿔 한 번 더 시도한 뒤에** 없다고 답합니다.
+- 둘 이상을 비교하면 compare_areas
+
+lookup_station 이 0건을 돌려주면 그때만 "도쿄 23구 데이터에 없는 역"이라고
+답합니다. 후보가 여럿이면 사용자에게 어느 쪽인지 되묻습니다.
 """
 
 
@@ -72,7 +92,7 @@ def build_agents() -> Agent[SessionState]:
     analysis: Agent[SessionState] = Agent(
         name="AnalysisAgent",
         instructions=_ANALYSIS_INSTRUCTIONS,
-        tools=[rank_areas, explain_area, compare_areas],
+        tools=[rank_areas, lookup_station, explain_area, compare_areas],
     )
     intake: Agent[SessionState] = Agent(
         name="IntakeAgent",

@@ -47,6 +47,12 @@ def set_criteria(
 
 
 @function_tool
+def lookup_station(ctx: RunContextWrapper[SessionState], name: str) -> dict[str, Any]:
+    """역 이름으로 station_id 를 찾는다. explain_area·compare_areas 에 넘길 id 를 얻는다."""
+    return actions.act_lookup_station(ctx.context, name)
+
+
+@function_tool
 def rank_areas(ctx: RunContextWrapper[SessionState], limit: int = 5) -> dict[str, Any]:
     """확정된 조건으로 역세권을 점수화해 상위 N곳을 반환한다."""
     return actions.act_rank_areas(ctx.context, limit=limit)

@@ -126,6 +126,45 @@ def act_set_criteria(
     }
 
 
+#: 후보가 많아도 LLM 컨텍스트를 채우지 않도록 자른다.
+MAX_LOOKUP_MATCHES = 10
+
+
+def act_lookup_station(state: SessionState, name: str) -> dict[str, Any]:
+    """역 이름으로 station_id 를 찾는다.
+
+    explain_area 는 해시 id 를 요구하는데, 사용자는 "히카리가오카 어때?" 라고
+    이름으로 묻는다. 이 툴이 없으면 에이전트는 랭킹 상위에 없는 역에 대해
+    "데이터가 없다"고 답한다 — 실제로는 있는데도.
+
+    부분 일치를 허용하고 정확히 일치하는 것을 먼저 둔다. "新宿" 은 新宿·
+    新宿三丁目·西新宿 을 모두 부르지만, 사용자가 뜻한 것은 대개 정확히 일치하는 쪽이다.
+    """
+    query = name.strip()
+    if not query:
+        return {"query": name, "matches": []}
+
+    matched = [
+        station
+        for station in state.usecases.rank.known_stations()
+        if query in station.name_ja
+    ]
+    matched.sort(key=lambda s: (s.name_ja != query, len(s.name_ja), s.id))
+
+    return {
+        "query": query,
+        "matches": [
+            {
+                "station_id": station.id,
+                "name_ja": station.name_ja,
+                "ward": station.ward,
+                "lines": list(station.lines),
+            }
+            for station in matched[:MAX_LOOKUP_MATCHES]
+        ],
+    }
+
+
 def act_rank_areas(state: SessionState, limit: int = 5) -> dict[str, Any]:
     if state.criteria is None:
         return {

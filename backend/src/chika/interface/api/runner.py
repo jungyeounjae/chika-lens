@@ -24,7 +24,11 @@ _TEXT_DELTA = "response.output_text.delta"
 
 async def run_turn(state: SessionState, message: str) -> AsyncIterator[Event]:
     """대화 한 턴. 텍스트 증분과 툴 결과를 다른 채널로 내보낸다 (스펙 §5.4)."""
-    result = Runner.run_streamed(build_agents(), message, context=state)
+    # 대화 이력을 함께 넘긴다. 넘기지 않으면 매 턴이 백지에서 시작해
+    # "공원은 몇개야?" 같은 이어지는 질문에 답할 수 없다.
+    result = Runner.run_streamed(
+        build_agents(), message, context=state, session=state.history
+    )
 
     # 툴 이름은 호출 이벤트에만 있고 결과 이벤트에는 call_id 만 있다.
     names_by_call: dict[str, str] = {}

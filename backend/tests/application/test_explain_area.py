@@ -144,3 +144,30 @@ def test_the_neighbour_list_is_capped() -> None:
     usecase = _usecase(stations, [_raw(s.id) for s in stations], {})
     result = usecase.execute("center", SearchCriteria(dials=DialSettings.balanced()))
     assert len(result.nearby) <= 8
+
+
+def test_explain_carries_the_raw_count_not_only_the_percentile() -> None:
+    """실사용에서 '공원은 몇개야?' 에 답하지 못했다.
+
+    백분위 99.2 만으로는 개수를 알 수 없다. 사용자가 실제로 궁금해하는 것은
+    '68개'라는 숫자다.
+    """
+    # 역이 하나뿐이면 기여도가 전부 0이라 공원이 상·하위 3개에 들지 못한다.
+    usecase = _usecase(
+        [_station("a"), _station("b")],
+        [_raw("a", park=68.0), _raw("b", park=1.0)],
+        {},
+    )
+    result = usecase.execute("a", SearchCriteria(dials=DialSettings({Dial.QUALITY_OF_LIFE: 1.0})))
+    detail = next(d for d in result.strengths if d.key is MetricKey.PARK)
+    assert detail.raw_value == 68.0
+    assert detail.percentile > 50
+
+
+def test_a_missing_metric_has_no_raw_value() -> None:
+    usecase = _usecase([_station("a")], [_raw("a", park=None)], {})
+    result = usecase.execute("a", SearchCriteria(dials=DialSettings.balanced()))
+    details = result.strengths + result.weaknesses
+    park = next((d for d in details if d.key is MetricKey.PARK), None)
+    if park is not None:
+        assert park.raw_value is None

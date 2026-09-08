@@ -18,6 +18,7 @@ from sse_starlette.sse import EventSourceResponse
 from chika.interface.agent.state import SessionState
 from chika.interface.api.events import Event, done_event, error_event
 from chika.interface.api.guards import CostGuard, DailyCapReached, GuardRefused, RateLimited
+from chika.interface.api.memory import InMemorySession
 from chika.interface.api.sessions import SessionStore
 from chika.interface.cli import build_real_session
 
@@ -84,6 +85,8 @@ def create_app(
             )
 
         state = sessions.get(body.session_id)
+        if state.history is None:
+            state.history = InMemorySession(body.session_id)
 
         async def stream() -> AsyncIterator[Event]:
             try:

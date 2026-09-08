@@ -36,27 +36,39 @@ def _resolve_commute_station(commute_to: str, stations: Sequence[Station]) -> St
 
 def act_set_criteria(
     state: SessionState,
-    korean_life: float,
-    daily_convenience: float,
-    quality_of_life: float,
-    family: float,
-    cost_risk: float,
+    korean_life: float | None = None,
+    daily_convenience: float | None = None,
+    quality_of_life: float | None = None,
+    family: float | None = None,
+    cost_risk: float | None = None,
     commute_to: str | None = None,
     commute_max_minutes: int | None = None,
     budget_min_yen: int | None = None,
     budget_max_yen: int | None = None,
-    household: str = "single",
-    exclude_wards: Sequence[str] = (),
+    household: str | None = None,
+    exclude_wards: Sequence[str] | None = None,
 ) -> dict[str, Any]:
-    """대화에서 모은 조건을 세션에 확정한다. 다시 불러 일부만 바꿔도 된다."""
-    try:
-        household_value = Household(household)
-    except ValueError as exc:
-        raise ValueError(
-            f"unknown household: {household!r} (single/couple/family 중 하나)"
-        ) from exc
+    """대화에서 모은 조건을 세션에 확정한다.
 
-    resolved_commute_to = commute_to
+    **생략한 값은 이전 턴의 값을 유지한다** (스펙 §5.5, §2.2-2).
+
+    전부 필수로 받으면 두 번째 턴이 첫 턴을 통째로 덮어쓴다. 실사용에서
+    "한식당 많은 곳" 다음에 "통근지는 없어요"라고 답하자 한국 생활 강조가
+    사라지고 전혀 다른 랭킹이 나왔다 — LLM은 그 턴에서 언급된 것만 넘기기 때문이다.
+    """
+    previous = state.criteria
+
+    if household is None:
+        household_value = previous.household if previous else Household.SINGLE
+    else:
+        try:
+            household_value = Household(household)
+        except ValueError as exc:
+            raise ValueError(
+                f"unknown household: {household!r} (single/couple/family 중 하나)"
+            ) from exc
+
+    resolved_commute_to = previous.commute_to if previous else None
     if commute_to is not None:
         known_stations = state.usecases.rank.known_stations()
         station = _resolve_commute_station(commute_to, known_stations)
@@ -68,26 +80,39 @@ def act_set_criteria(
             }
         resolved_commute_to = station.id
 
-    budget: tuple[int, int] | None = None
+    budget: tuple[int, int] | None = previous.budget_yen if previous else None
     if budget_min_yen is not None or budget_max_yen is not None:
         budget = (budget_min_yen or 0, budget_max_yen or 10_000_000)
 
+    def dial(given: float | None, key: Dial) -> float:
+        if given is not None:
+            return given
+        return previous.dials.strength(key) if previous else 0.0
+
     dials = DialSettings(
         {
-            Dial.KOREAN_LIFE: korean_life,
-            Dial.DAILY_CONVENIENCE: daily_convenience,
-            Dial.QUALITY_OF_LIFE: quality_of_life,
-            Dial.FAMILY: family,
-            Dial.COST_RISK: cost_risk,
+            Dial.KOREAN_LIFE: dial(korean_life, Dial.KOREAN_LIFE),
+            Dial.DAILY_CONVENIENCE: dial(daily_convenience, Dial.DAILY_CONVENIENCE),
+            Dial.QUALITY_OF_LIFE: dial(quality_of_life, Dial.QUALITY_OF_LIFE),
+            Dial.FAMILY: dial(family, Dial.FAMILY),
+            Dial.COST_RISK: dial(cost_risk, Dial.COST_RISK),
         }
     )
     criteria = SearchCriteria(
         dials=dials,
         commute_to=resolved_commute_to,
-        commute_max_minutes=commute_max_minutes,
+        commute_max_minutes=(
+            commute_max_minutes
+            if commute_max_minutes is not None
+            else (previous.commute_max_minutes if previous else None)
+        ),
         budget_yen=budget,
         household=household_value,
-        exclude_wards=tuple(exclude_wards),
+        exclude_wards=(
+            tuple(exclude_wards)
+            if exclude_wards is not None
+            else (previous.exclude_wards if previous else ())
+        ),
     )
     state.criteria = criteria
     state.last_ranking = []

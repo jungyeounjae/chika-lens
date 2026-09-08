@@ -13,16 +13,16 @@ from chika.interface.agent.state import SessionState
 @function_tool
 def set_criteria(
     ctx: RunContextWrapper[SessionState],
-    korean_life: float,
-    daily_convenience: float,
-    quality_of_life: float,
-    family: float,
-    cost_risk: float,
+    korean_life: float | None = None,
+    daily_convenience: float | None = None,
+    quality_of_life: float | None = None,
+    family: float | None = None,
+    cost_risk: float | None = None,
     commute_to: str | None = None,
     commute_max_minutes: int | None = None,
     budget_min_yen: int | None = None,
     budget_max_yen: int | None = None,
-    household: str = "single",
+    household: str | None = None,
     exclude_wards: list[str] | None = None,
 ) -> dict[str, Any]:
     """사용자 조건을 확정한다. 다이얼 5개는 0~5의 상대 강도다.

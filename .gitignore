@@ -73,3 +73,8 @@ htmlcov/
 # Worktrees / SDD scratch
 .claude/worktrees/
 .superpowers/
+
+# Next.js
+frontend/.next/
+frontend/node_modules/
+frontend/out/

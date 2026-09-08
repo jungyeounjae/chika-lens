@@ -5,6 +5,7 @@ import pytest
 
 from chika.domain.model.metrics import MetricKey
 from chika.etl.aggregate_batch import (
+    FREE_TIER_CALLS,
     BudgetExceeded,
     Checkpoint,
     effective_type_count,
@@ -94,7 +95,7 @@ def test_pending_work_is_ordered_by_station_then_query() -> None:
 
 
 def test_pending_work_over_budget_raises_before_spending_anything() -> None:
-    with pytest.raises(BudgetExceeded, match="4,401"):
+    with pytest.raises(BudgetExceeded, match="4,890"):
         pending_work(
             [f"st_{i}" for i in range(489)], CORE_QUERIES, done=set(), max_calls=100
         )
@@ -161,6 +162,7 @@ def test_query_keys_cover_every_aggregate_metric() -> None:
         MetricKey.KOREAN_RESTAURANT, MetricKey.SUPERMARKET, MetricKey.CONVENIENCE_STORE,
         MetricKey.HEALTHCARE, MetricKey.CAFE, MetricKey.PARK, MetricKey.FITNESS,
         MetricKey.CHILD_FRIENDLY_VENUE, MetricKey.NUISANCE_VENUE,
+        MetricKey.CHILDCARE_EDUCATION,
     }
     assert covered == expected
 
@@ -174,3 +176,20 @@ def test_aggregate_query_is_frozen() -> None:
     q = AggregateQuery("x", ("cafe",))
     with pytest.raises(AttributeError):
         q.key = "y"  # type: ignore[misc]
+
+
+def test_childcare_is_collected_from_aggregate_not_mlit() -> None:
+    """지표 11을 MLIT 담당으로 뒀으나 Google 에 이미 있었다 (스펙 §6.2.5).
+
+    preschool + primary_school 만 쓴다. `school` 은 학원·어학원까지 잡아
+    상업지구 점수가 되고, `child_care_agency` 는 상업지구를 부풀린다
+    (明治神宮前 11 -> 21).
+    """
+    query = next(q for q in CORE_QUERIES if q.key == MetricKey.CHILDCARE_EDUCATION)
+    assert set(query.included_types) == {"preschool", "primary_school"}
+    assert query.min_rating is None
+
+
+def test_the_core_batch_stays_within_the_free_tier() -> None:
+    """489역 × 코어 지표가 월 5,000콜을 넘으면 과금이 시작된다."""
+    assert 489 * len(CORE_QUERIES) <= FREE_TIER_CALLS

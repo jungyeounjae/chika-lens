@@ -22,6 +22,9 @@ from chika.domain.service.scoring import score
 class MetricDetail:
     key: MetricKey
     percentile: float
+    #: 정규화 이전의 실제 값(공원 68개 등).
+    #: 백분위만으로는 "몇 개야?" 에 답할 수 없다.
+    raw_value: float | None
     contribution: float
     is_missing: bool
     is_ward_resolution: bool
@@ -65,13 +68,16 @@ class ExplainArea:
         if station is None:
             raise KeyError(f"unknown station: {station_id}")
 
-        area = _find_area(normalize(self._areas.raw_metrics()), station_id)
+        raws = self._areas.raw_metrics()
+        area = _find_area(normalize(raws), station_id)
+        raw = next((r for r in raws if r.station_id == station_id), None)
         area_score = score(area, expand_dials(criteria.dials))
 
         def detail(key: MetricKey) -> MetricDetail:
             return MetricDetail(
                 key=key,
                 percentile=area.percentile[key],
+                raw_value=raw.get(key) if raw is not None else None,
                 contribution=area_score.contributions[key],
                 is_missing=key in area.missing,
                 is_ward_resolution=key in WARD_RESOLUTION_METRICS,

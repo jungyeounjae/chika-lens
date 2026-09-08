@@ -224,6 +224,8 @@ def act_explain_area(state: SessionState, station_id: str) -> dict[str, Any]:
         return {
             "metric": item.key.value,
             "percentile": round(item.percentile, 1),
+            # 실제 개수. "공원 몇 개야?" 에 답하려면 백분위만으로는 부족하다.
+            "raw_value": item.raw_value,
             "contribution": round(item.contribution, 2),
             "is_missing": item.is_missing,
             "is_ward_resolution": item.is_ward_resolution,

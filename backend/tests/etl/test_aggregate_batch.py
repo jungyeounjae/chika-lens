@@ -11,6 +11,7 @@ from chika.etl.aggregate_batch import (
     effective_type_count,
     fold_results,
     pending_work,
+    remaining_budget,
 )
 from chika.etl.aggregate_queries import CORE_QUERIES, CUISINE_BASKET, AggregateQuery
 
@@ -193,3 +194,27 @@ def test_childcare_is_collected_from_aggregate_not_mlit() -> None:
 def test_the_core_batch_stays_within_the_free_tier() -> None:
     """489역 × 코어 지표가 월 5,000콜을 넘으면 과금이 시작된다."""
     assert 489 * len(CORE_QUERIES) <= FREE_TIER_CALLS
+
+
+# --- 당월 사용량 인지 ---
+
+
+def test_remaining_budget_subtracts_what_was_already_spent() -> None:
+    """--max-calls 는 '남은 작업량'만 보고 '이번 달 이미 쓴 양'을 몰랐다.
+
+    재수집을 반복하는 동안 매번 "121콜이면 상한 5,000 안"이라고 통과시켰고,
+    실제로는 일일 한도를 넘겨 429를 맞았다.
+    """
+    assert remaining_budget(used_this_month=4_550) == 450
+    assert remaining_budget(used_this_month=0) == FREE_TIER_CALLS
+
+
+def test_remaining_budget_never_goes_negative() -> None:
+    assert remaining_budget(used_this_month=6_000) == 0
+
+
+def test_pending_work_can_be_capped_by_the_real_remaining_budget() -> None:
+    """당월 잔여로 상한을 걸면 무료 한도를 넘기 전에 멈춘다."""
+    stations = [f"st_{i}" for i in range(100)]
+    with pytest.raises(BudgetExceeded, match="450"):
+        pending_work(stations, CORE_QUERIES, done=set(), max_calls=450)

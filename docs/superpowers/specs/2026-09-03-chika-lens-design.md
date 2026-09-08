@@ -571,7 +571,7 @@ log(시세중앙값) ~ 지표 1~12, 14, 15
 | 2 | **Aggregate API 집계 배치 → 인덱스 물질화** | 결제 계정 + API 키 | ✅ 구현 완료 |
 | 3 | 가치 갭 회귀 (R² 0.5 게이트) | Phase 1+2 | — |
 | 4 | SSE API 층 | OpenAI 키 | ✅ 구현 완료 |
-| 4 | Next.js 지도 + 채팅 프론트 | — | — |
+| 4 | Next.js 지도 + 채팅 프론트 | OpenAI 키 | ✅ 구현 완료 |
 | 5 | 배포 | — | — |
 
 ### 8.1 Aggregate 배치 실측 (2026-09-07)
@@ -657,7 +657,7 @@ Phase 0 종료 시점에 **가짜 데이터로 에이전트가 대화하고 랭�
 | 구성요소 | 방식 | 이유 |
 |---|---|---|
 | 백엔드 | Cloud Run | Maps Platform과 같은 프로젝트, 시크릿 관리 단순 |
-| 프론트 | Vercel | Next.js 기본값 |
+| 프론트 | Vercel | Next.js 기본값. 지도는 MapLibre + OSM (Google Maps JS API 는 별도 과금 SKU) |
 | ETL 배치 | Cloud Run Jobs + Scheduler (월 1회) | 집계 캐시 30일 제한에 맞춘 갱신 |
 | 시크릿 | Secret Manager | OpenAI·MLIT·Maps 키 |
 

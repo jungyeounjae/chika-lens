@@ -11,7 +11,11 @@ from typing import Any
 from chika.application.usecase.explain_area import MetricDetail
 from chika.application.usecase.rank_areas import RankedArea
 from chika.domain.model.criteria import Household, SearchCriteria
-from chika.domain.model.metrics import WARD_RESOLUTION_METRICS, MetricKey
+from chika.domain.model.metrics import (
+    METRIC_UNITS,
+    WARD_RESOLUTION_METRICS,
+    MetricKey,
+)
 from chika.domain.model.station import Station
 from chika.domain.model.weights import Dial, DialSettings
 from chika.domain.service.dials import expand_dials
@@ -183,6 +187,7 @@ def act_rank_areas(state: SessionState, limit: int = 5) -> dict[str, Any]:
         percentile = row.percentile[key]
         return {
             "metric": key.value,
+            "unit": METRIC_UNITS[key],
             "contribution": round(contribution, 2),
             "percentile": round(percentile, 1),
             "top_percent": round(100 - percentile, 1),
@@ -241,6 +246,8 @@ def act_explain_area(state: SessionState, station_id: str) -> dict[str, Any]:
     def detail(item: MetricDetail) -> dict[str, Any]:
         return {
             "metric": item.key.value,
+            # 단위가 없으면 LLM 이 raw_value 를 전부 개수로 읽는다.
+            "unit": METRIC_UNITS[item.key],
             "percentile": round(item.percentile, 1),
             # 실제 개수. "공원 몇 개야?" 에 답하려면 백분위만으로는 부족하다.
             "raw_value": item.raw_value,

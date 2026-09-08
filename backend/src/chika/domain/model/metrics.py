@@ -37,6 +37,33 @@ NEGATIVE_METRICS: frozenset[MetricKey] = frozenset(
 #: 역세권이 아니라 구 단위 해상도인 지표. 화면에 반드시 명시해야 한다 (스펙 §3.2).
 WARD_RESOLUTION_METRICS: frozenset[MetricKey] = frozenset({MetricKey.KOREAN_RESIDENT_RATIO})
 
+#: 원시값의 단위. 대부분은 반경 800m 안의 시설 개수지만 셋은 다르다.
+#:
+#: 단위가 없으면 LLM 이 `raw_value` 를 전부 개수로 읽는다 — 시세 1,100,000 을
+#: "110만 곳", 한국 국적 비율 3.5 를 "3.5곳"으로 말한다. 지표 13 을 붙이면서
+#: 드러났지만 지표 3·10 에 이미 있던 결함이다.
+METRIC_UNITS: Mapping[MetricKey, str] = {
+    MetricKey.KOREAN_RESTAURANT: "곳",
+    MetricKey.KOREAN_GROCERY: "곳",
+    MetricKey.KOREAN_RESIDENT_RATIO: "%",
+    MetricKey.SUPERMARKET: "곳",
+    MetricKey.CONVENIENCE_STORE: "곳",
+    MetricKey.HEALTHCARE: "곳",
+    MetricKey.CAFE: "곳",
+    MetricKey.PARK: "곳",
+    MetricKey.FITNESS: "곳",
+    # 유효 종 수 exp(H). "8종 중 3.13종"처럼 읽는다 — 개수가 아니다.
+    MetricKey.RESTAURANT_VARIETY: "종",
+    MetricKey.CHILDCARE_EDUCATION: "곳",
+    MetricKey.CHILD_FRIENDLY_VENUE: "곳",
+    # 매매 ㎡당 단가. 월세가 아니다 (MLIT 거래가격에는 임대가 없다).
+    MetricKey.PRICE_LEVEL: "엔/㎡",
+    # 아직 수집하지 않는 지표라 쓰이지 않는다. 지표를 만들 때 함께 확정한다
+    # (스펙 §11-9).
+    MetricKey.DISASTER_RISK: "%",
+    MetricKey.NUISANCE_VENUE: "곳",
+}
+
 
 @dataclass(frozen=True)
 class RawMetrics:

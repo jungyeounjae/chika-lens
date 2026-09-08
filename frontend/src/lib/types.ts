@@ -2,6 +2,8 @@
 
 export type MetricDriver = {
   metric: string;
+  /** 원시값의 단위. 전부 개수가 아니다 — "엔/㎡", "%", "종"이 섞여 있다. */
+  unit: string;
   contribution: number;
   percentile: number;
   top_percent: number;

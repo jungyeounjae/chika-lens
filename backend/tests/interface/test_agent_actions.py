@@ -180,6 +180,31 @@ def test_explain_marks_ward_resolution_metrics(state: SessionState) -> None:
     assert all(d["is_ward_resolution"] for d in ratios)
 
 
+def test_every_metric_detail_carries_its_unit(state: SessionState) -> None:
+    """단위가 없으면 LLM 이 raw_value 를 전부 개수로 읽는다.
+
+    시세 1,100,000 이 "110만 곳", 한국 국적 비율 3.5 가 "3.5곳"이 된다.
+    """
+    _set_default_criteria(state)
+    ranked = act_rank_areas(state, limit=1)
+    details = act_explain_area(state, ranked["areas"][0]["station_id"])
+    items = details["strengths"] + details["weaknesses"]
+    items += ranked["areas"][0]["top_drivers"]
+    assert items
+    for item in items:
+        assert item["unit"], item
+
+    units = {item["metric"]: item["unit"] for item in items}
+    for metric, expected in (
+        ("price_level", "엔/㎡"),
+        ("korean_resident_ratio", "%"),
+        ("restaurant_variety", "종"),
+        ("park", "곳"),
+    ):
+        if metric in units:
+            assert units[metric] == expected
+
+
 def test_explain_gives_the_total_score_for_a_station_in_the_ranking(
     state: SessionState,
 ) -> None:

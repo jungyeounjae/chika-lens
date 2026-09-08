@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator, Callable
 from typing import Protocol
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
@@ -38,6 +39,22 @@ def create_app(
     guard: CostGuard | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Chika Lens", docs_url="/docs")
+
+    # 프론트가 다른 포트에서 뜨므로 CORS 가 필요하다.
+    # 와일드카드를 쓰지 않는다 — 공개되면 누구나 이 API 를 자기 사이트에서
+    # 호출할 수 있고, 그 비용은 우리 OpenAI 청구서로 온다.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            origin.strip()
+            for origin in os.environ.get(
+                "CHIKA_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+            ).split(",")
+            if origin.strip()
+        ],
+        allow_methods=["POST", "GET"],
+        allow_headers=["Content-Type"],
+    )
 
     factory = session_factory or _default_session_factory
     sessions: SessionStore[SessionState] = SessionStore(factory)

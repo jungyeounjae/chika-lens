@@ -335,3 +335,64 @@ def test_resolved_commute_destination_actually_filters_the_ranking() -> None:
     assert "far" not in ids
     assert "near" in ids
     assert "hub" in ids
+
+
+# --- 조건 되돌리기 (스펙 §5.5) ---
+
+
+def test_omitted_dials_keep_their_previous_values(state: SessionState) -> None:
+    """실사용에서 드러난 결함: 두 번째 턴이 첫 턴의 조건을 통째로 지웠다.
+
+    사용자가 "한식당이 많은 곳"이라 말한 뒤 "통근지는 없어요"라고만 답하면,
+    LLM은 그 턴에서 언급된 것만 넘긴다. 다이얼을 필수로 받으면 한국 생활
+    강조가 사라지고 전혀 다른 랭킹이 나온다.
+    """
+    act_set_criteria(state, korean_life=5.0, daily_convenience=1.0)
+    act_set_criteria(state, household="single")
+
+    assert state.criteria is not None
+    assert state.criteria.dials.strength(Dial.KOREAN_LIFE) == 5.0
+    assert state.criteria.dials.strength(Dial.DAILY_CONVENIENCE) == 1.0
+
+
+def test_a_named_dial_overwrites_only_itself(state: SessionState) -> None:
+    act_set_criteria(state, korean_life=5.0, family=1.0)
+    act_set_criteria(state, family=4.0)
+
+    assert state.criteria is not None
+    assert state.criteria.dials.strength(Dial.KOREAN_LIFE) == 5.0
+    assert state.criteria.dials.strength(Dial.FAMILY) == 4.0
+
+
+def test_omitted_budget_and_household_are_kept(state: SessionState) -> None:
+    act_set_criteria(
+        state, korean_life=3.0, budget_max_yen=150_000, household="family"
+    )
+    act_set_criteria(state, quality_of_life=2.0)
+
+    assert state.criteria is not None
+    assert state.criteria.budget_yen == (0, 150_000)
+    assert state.criteria.household is Household.FAMILY
+
+
+def test_budget_can_be_revised(state: SessionState) -> None:
+    """스펙 §2.2-2 — '예산 12만엔으로 낮추면?'"""
+    act_set_criteria(state, korean_life=3.0, budget_max_yen=150_000)
+    act_set_criteria(state, budget_max_yen=120_000)
+
+    assert state.criteria is not None
+    assert state.criteria.budget_yen == (0, 120_000)
+
+
+def test_the_first_call_needs_no_previous_state(state: SessionState) -> None:
+    act_set_criteria(state, korean_life=5.0)
+    assert state.criteria is not None
+    assert state.criteria.dials.strength(Dial.KOREAN_LIFE) == 5.0
+    assert state.criteria.dials.strength(Dial.FAMILY) == 0.0
+
+
+def test_revising_criteria_clears_the_stale_ranking(state: SessionState) -> None:
+    act_set_criteria(state, korean_life=5.0)
+    act_rank_areas(state, limit=3)
+    act_set_criteria(state, family=5.0)
+    assert state.last_ranking == []

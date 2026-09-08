@@ -75,10 +75,13 @@ export function AreaMap({
       const marker = new maplibregl.Marker({ element: pin })
         .setLngLat([area.lon, area.lat])
         .setPopup(
+          // 종합 점수는 비교 기준이 있을 때만 온다 — 없으면 이름만 찍는다.
           new maplibregl.Popup({ offset: 18 }).setText(
-            numbered
-              ? `${index + 1}. ${area.name_ja} (${area.ward}) ${area.score.toFixed(1)}점`
-              : `${area.name_ja} (${area.ward}) ${area.score.toFixed(1)}점`,
+            [
+              numbered ? `${index + 1}. ` : "",
+              `${area.name_ja} (${area.ward})`,
+              area.score === undefined ? "" : ` ${area.score.toFixed(1)}점`,
+            ].join(""),
           ),
         )
         .addTo(instance);

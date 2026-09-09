@@ -12,6 +12,7 @@ from chika.interface.agent.tools import (
     metric_distribution,
     rank_areas,
     set_criteria,
+    ward_price_ranking,
 )
 
 _INTAKE_INSTRUCTIONS = """\
@@ -200,9 +201,40 @@ _ANALYSIS_INSTRUCTIONS = """\
   MLIT 원자료는 그대로 표시하지 않는다는 서약). "이 역 반경의 재해위험
   구역을 지도에 표시했다"가 아니라 "주변 역들을 재해위험 백분위로
   색칠했다"고 말합니다.
+- **시세 질문은 전부 ward_price_ranking.** `rank_areas`는 다이얼 가중
+  종합점수라 이 질문에 못 씁니다 — 시세만 순수 정렬·조회한 결과가
+  필요하면 반드시 이 툴입니다.
+
+  - "가장 낮은/높은 구는 어디야?" -> `direction`("lowest"/"highest")
+  - **"○○区 시세는 어때?"처럼 구를 특정하면 -> `ward`에 그 구 이름을
+    넣습니다(반드시 일본어, 예: "港区". "미나토구"가 아닙니다).**
+    `direction`만으로는 안 됩니다 — 최저·최고 5위 안에 없는 중간권 구
+    (23개 중 13개)는 direction으로 절대 조회되지 않습니다. 실제로
+    "中野区 시세는 어때?"에 `direction="lowest"`를 불러 足立区 데이터를
+    답으로 낸 적이 있습니다 — 물은 구와 답한 구가 달랐습니다.
+    `ward`가 `unknown_ward`를 돌려주면 `known_wards`에서 표기를
+    맞춰 봅니다.
+
+  **답변 첫 문장에 `source_note`를 그대로 밝힙니다.** "공시지가"라고
+  부르면 안 됩니다 — 우리 데이터는 MLIT 실거래 사례의 중앙값이지 정부
+  고시가가 아닙니다. 다른 걸 갖고 있다고 말하는 것은 숫자를 지어내는
+  것보다 나쁩니다.
+
+  구마다 대표 역 최대 2곳이 옵니다 — 왜 그 구가 저렴한지 1문장으로
+  덧붙일 때 **`supermarket_percentile`·`convenience_store_percentile`로만**
+  말합니다("상업 시설이 상대적으로 적은 편입니다" 등). "도심에서 멀다",
+  "교통이 불편하다" 같은 말은 하지 마세요 — 그런 지표는 애초에 없고,
+  하는 순간 규칙 1-1이 금지하는 지어낸 사실이 됩니다.
 
 lookup_station 이 0건을 돌려주면 그때만 "도쿄 23구 데이터에 없는 역"이라고
 답합니다. 후보가 여럿이면 사용자에게 어느 쪽인지 되묻습니다.
+
+**질문에 맞는 정렬 기능이 없다고 판단했으면, 그 자리에서 답을 끝냅니다.**
+관련 없는 조건으로 rank_areas를 불러 결과를 보여주지 마세요 — 실제로
+"땅값 낮은 곳"을 물었는데 이전 턴의 한국 생활 조건으로 만든 랭킹을
+그대로 다시 보여준 적이 있습니다. 그 랭킹은 땅값과 무관해서 사용자가
+답인 줄 오해합니다. 지금 없는 기능이면 없다고만 말하고, 대체할 수 있는
+툴(예: 위 ward_price_ranking)이 있으면 그걸 부르세요.
 """
 
 
@@ -211,7 +243,14 @@ def build_agents() -> Agent[SessionState]:
     analysis: Agent[SessionState] = Agent(
         name="AnalysisAgent",
         instructions=_ANALYSIS_INSTRUCTIONS,
-        tools=[rank_areas, lookup_station, explain_area, compare_areas, metric_distribution],
+        tools=[
+            rank_areas,
+            lookup_station,
+            explain_area,
+            compare_areas,
+            metric_distribution,
+            ward_price_ranking,
+        ],
     )
     intake: Agent[SessionState] = Agent(
         name="IntakeAgent",

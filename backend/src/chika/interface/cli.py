@@ -14,6 +14,7 @@ from chika.application.usecase.compare_areas import CompareAreas
 from chika.application.usecase.explain_area import ExplainArea
 from chika.application.usecase.metric_distribution import MetricDistribution
 from chika.application.usecase.rank_areas import RankAreas
+from chika.application.usecase.ward_price import WardPriceRanking
 from chika.infrastructure.fake.repositories import (
     FakeAreaMetricsRepository,
     FakeCommuteRepository,
@@ -34,6 +35,7 @@ def build_demo_session(count: int = 40) -> SessionState:
             explain=ExplainArea(areas, FakePriceRepository(prices)),
             compare=CompareAreas(areas),
             distribution=MetricDistribution(areas),
+            ward_price=WardPriceRanking(areas),
         )
     )
 
@@ -73,6 +75,7 @@ def build_real_session(
             explain=ExplainArea(areas, FakePriceRepository({})),
             compare=CompareAreas(areas),
             distribution=MetricDistribution(areas),
+            ward_price=WardPriceRanking(areas),
         )
     )
 

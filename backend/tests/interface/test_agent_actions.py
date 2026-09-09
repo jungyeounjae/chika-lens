@@ -4,6 +4,7 @@ from chika.application.usecase.compare_areas import CompareAreas
 from chika.application.usecase.explain_area import ExplainArea
 from chika.application.usecase.metric_distribution import MetricDistribution
 from chika.application.usecase.rank_areas import RankAreas
+from chika.application.usecase.ward_price import WardPriceRanking
 from chika.domain.model.criteria import Household
 from chika.domain.model.metrics import MetricKey, RawMetrics
 from chika.domain.model.station import Station
@@ -21,6 +22,7 @@ from chika.interface.agent.actions import (
     act_metric_distribution,
     act_rank_areas,
     act_set_criteria,
+    act_ward_price_ranking,
 )
 from chika.interface.agent.state import SessionState, UseCases
 
@@ -60,6 +62,7 @@ def _deterministic_state(
             explain=ExplainArea(areas, FakePriceRepository(prices or {})),
             compare=CompareAreas(areas),
             distribution=MetricDistribution(areas),
+            ward_price=WardPriceRanking(areas),
         )
     )
 
@@ -74,6 +77,7 @@ def state() -> SessionState:
             explain=ExplainArea(areas, FakePriceRepository(prices)),
             compare=CompareAreas(areas),
             distribution=MetricDistribution(areas),
+            ward_price=WardPriceRanking(areas),
         )
     )
 
@@ -725,3 +729,110 @@ def test_metric_distribution_does_not_require_criteria() -> None:
     assert session.criteria is None
     result = act_metric_distribution(session, "a", "park")
     assert "error" not in result
+
+
+# --- ward_price_ranking: 구 단위 시세 최저·최고 ---
+
+
+def test_ward_price_ranking_carries_the_source_note() -> None:
+    """공시지가와 혼동하지 않도록 답변 첫 문장에 밝힐 문구다."""
+    session = _deterministic_state(
+        [_station("a", ward="足立区")], [_raw("a", price_level=400_000.0)]
+    )
+    result = act_ward_price_ranking(session)
+    assert "공시지가" in result["source_note"]
+    assert "MLIT" in result["source_note"]
+
+
+def test_ward_price_ranking_defaults_to_lowest() -> None:
+    session = _deterministic_state(
+        [_station("cheap", ward="足立区"), _station("pricey", ward="港区")],
+        [_raw("cheap", price_level=400_000.0), _raw("pricey", price_level=1_500_000.0)],
+    )
+    result = act_ward_price_ranking(session)
+    assert result["wards"][0]["ward"] == "足立区"
+
+
+def test_ward_price_ranking_highest_reverses_the_order() -> None:
+    session = _deterministic_state(
+        [_station("cheap", ward="足立区"), _station("pricey", ward="港区")],
+        [_raw("cheap", price_level=400_000.0), _raw("pricey", price_level=1_500_000.0)],
+    )
+    result = act_ward_price_ranking(session, direction="highest")
+    assert result["wards"][0]["ward"] == "港区"
+
+
+def test_ward_price_ranking_rejects_an_unknown_direction() -> None:
+    session = _deterministic_state(
+        [_station("a", ward="足立区")], [_raw("a", price_level=400_000.0)]
+    )
+    result = act_ward_price_ranking(session, direction="cheapest")
+    assert result["error"] == "unknown_direction"
+
+
+def test_ward_price_ranking_reports_no_data_rather_than_guessing() -> None:
+    session = _deterministic_state(
+        [_station("a", ward="足立区")], [_raw("a", price_level=None)]
+    )
+    result = act_ward_price_ranking(session)
+    assert result["error"] == "no_price_data"
+
+
+def test_ward_price_ranking_caps_the_limit() -> None:
+    stations = [_station(f"s{i}", ward=f"구{i}") for i in range(10)]
+    raws = [_raw(f"s{i}", price_level=float(i) * 100_000) for i in range(10)]
+    session = _deterministic_state(stations, raws)
+    result = act_ward_price_ranking(session, limit=999)
+    assert len(result["wards"]) <= 5
+
+
+def test_ward_price_ranking_representative_stations_carry_reasoning_material() -> None:
+    """도심 거리 같은 지어낸 지표가 아니라 상업 밀도 percentile만 준다."""
+    session = _deterministic_state(
+        [_station("a", ward="足立区")], [_raw("a", price_level=400_000.0)]
+    )
+    result = act_ward_price_ranking(session)
+    rep = result["wards"][0]["representative"][0]
+    assert set(rep) >= {
+        "station_id", "name_ja", "lat", "lon",
+        "price_level", "price_percentile",
+        "supermarket_percentile", "convenience_store_percentile",
+    }
+
+
+def test_ward_price_ranking_does_not_require_criteria() -> None:
+    session = _deterministic_state(
+        [_station("a", ward="足立区")], [_raw("a", price_level=400_000.0)]
+    )
+    assert session.criteria is None
+    result = act_ward_price_ranking(session)
+    assert "error" not in result
+
+
+def test_ward_price_ranking_with_a_ward_returns_only_that_ward() -> None:
+    """"中野区 시세는 어때?"에 무관한 구 데이터를 답한 적이 있다 — 그 재발 방지."""
+    session = _deterministic_state(
+        [_station("a", ward="足立区"), _station("b", ward="中野区")],
+        [_raw("a", price_level=400_000.0), _raw("b", price_level=1_000_000.0)],
+    )
+    result = act_ward_price_ranking(session, ward="中野区")
+    assert len(result["wards"]) == 1
+    assert result["wards"][0]["ward"] == "中野区"
+
+
+def test_ward_price_ranking_ward_ignores_direction_and_limit() -> None:
+    session = _deterministic_state(
+        [_station("a", ward="足立区"), _station("b", ward="中野区")],
+        [_raw("a", price_level=400_000.0), _raw("b", price_level=1_000_000.0)],
+    )
+    result = act_ward_price_ranking(session, direction="highest", limit=5, ward="足立区")
+    assert [w["ward"] for w in result["wards"]] == ["足立区"]
+
+
+def test_ward_price_ranking_rejects_an_unknown_ward_with_known_wards() -> None:
+    session = _deterministic_state(
+        [_station("a", ward="足立区")], [_raw("a", price_level=400_000.0)]
+    )
+    result = act_ward_price_ranking(session, ward="가상구")
+    assert result["error"] == "unknown_ward"
+    assert "足立区" in result["known_wards"]

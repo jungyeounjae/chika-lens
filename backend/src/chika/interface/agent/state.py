@@ -9,6 +9,7 @@ from chika.application.usecase.compare_areas import CompareAreas
 from chika.application.usecase.explain_area import ExplainArea
 from chika.application.usecase.metric_distribution import MetricDistribution
 from chika.application.usecase.rank_areas import RankAreas, RankedArea
+from chika.application.usecase.ward_price import WardPriceRanking
 from chika.domain.model.criteria import SearchCriteria
 
 
@@ -18,6 +19,7 @@ class UseCases:
     explain: ExplainArea
     compare: CompareAreas
     distribution: MetricDistribution
+    ward_price: WardPriceRanking
 
 
 @dataclass

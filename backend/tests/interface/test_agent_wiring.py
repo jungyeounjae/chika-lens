@@ -28,6 +28,7 @@ def test_analysis_agent_exposes_the_analysis_tools() -> None:
         "explain_area",
         "compare_areas",
         "metric_distribution",
+        "ward_price_ranking",
     }
 
 

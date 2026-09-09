@@ -10,6 +10,7 @@ from typing import Any
 
 from chika.application.usecase.explain_area import MetricDetail
 from chika.application.usecase.rank_areas import RankedArea
+from chika.application.usecase.ward_price import WardPrice
 from chika.domain.model.criteria import (
     HOUSEHOLD_LABELS_KO,
     Household,
@@ -27,6 +28,15 @@ from chika.domain.model.weights import DIAL_LABELS_KO, Dial, DialSettings
 from chika.domain.service.dials import DIAL_TO_METRICS, expand_dials
 from chika.domain.service.personas import seed_dials
 from chika.interface.agent.state import SessionState
+
+#: 구 랭킹에서 한 번에 낼 상한. 23구뿐이라 크게 잡을 이유가 없다.
+MAX_WARD_LIMIT = 5
+
+#: 실거래가와 정부 공시지가를 혼동하지 않도록 답변마다 못박는 문구.
+PRICE_SOURCE_NOTE = (
+    "MLIT 부동산 거래가격 정보 기준, 중고 맨션 실거래 ㎡당 단가의 중앙값입니다. "
+    "정부가 고시하는 공시지가가 아닙니다."
+)
 
 
 def _missing(keys: Iterable[MetricKey]) -> list[dict[str, str]]:
@@ -412,4 +422,72 @@ def act_metric_distribution(state: SessionState, station_id: str, metric: str) -
             }
             for p in points
         ],
+    }
+
+
+def _ward_payload(w: WardPrice) -> dict[str, Any]:
+    return {
+        "ward": w.ward,
+        "median_price": round(w.median_price, 1),
+        "station_count": w.station_count,
+        "representative": [
+            {
+                "station_id": r.station.id,
+                "name_ja": r.station.name_ja,
+                "lat": r.station.lat,
+                "lon": r.station.lon,
+                "price_level": round(r.price_level, 1),
+                "price_percentile": round(r.price_percentile, 1),
+                # 저평가 이유를 지어내지 말고 이 두 값으로만 말하라는
+                # 근거 — "도심 거리" 같은 지표는 애초에 없다.
+                "supermarket_percentile": round(r.supermarket_percentile, 1),
+                "convenience_store_percentile": round(r.convenience_store_percentile, 1),
+            }
+            for r in w.representative
+        ],
+    }
+
+
+def act_ward_price_ranking(
+    state: SessionState,
+    direction: str = "lowest",
+    limit: int = 1,
+    ward: str | None = None,
+) -> dict[str, Any]:
+    """구 단위 시세를 낸다 — 최저·최고 순위이거나, `ward` 를 주면 그 구 하나.
+
+    "땅값이 가장 낮은/높은 구는 어디야?" 에는 direction/limit 로, "○○区
+    시세는 어때?" 처럼 **특정 구**를 물으면 `ward` 로 답한다. `ward` 를 주면
+    direction/limit 는 무시된다 — 최저 5·최고 5 순위에 없는 중간권 구(23개
+    중 13개)는 direction 만으로는 아예 조회가 안 되기 때문이다.
+    `rank_areas`는 다이얼 가중 종합점수이지 시세 순수 정렬이 아니라서,
+    없는 정렬을 지어내는 대신 이 툴이 실제로 그 정렬·조회를 한다.
+    """
+    wards = state.usecases.ward_price.execute()
+    if not wards:
+        return {"error": "no_price_data"}
+
+    if ward is not None:
+        found = next((w for w in wards if w.ward == ward), None)
+        if found is None:
+            return {
+                "error": "unknown_ward",
+                "ward": ward,
+                "known_wards": sorted(w.ward for w in wards),
+            }
+        selected = [found]
+        direction = "single"
+    else:
+        if direction not in ("lowest", "highest"):
+            return {"error": "unknown_direction", "direction": direction}
+        capped = max(1, min(limit, MAX_WARD_LIMIT))
+        selected = wards[:capped] if direction == "lowest" else list(reversed(wards))[:capped]
+
+    return {
+        "metric": MetricKey.PRICE_LEVEL.value,
+        "label": METRIC_LABELS_KO[MetricKey.PRICE_LEVEL],
+        "unit": METRIC_UNITS[MetricKey.PRICE_LEVEL],
+        "source_note": PRICE_SOURCE_NOTE,
+        "direction": direction,
+        "wards": [_ward_payload(w) for w in selected],
     }

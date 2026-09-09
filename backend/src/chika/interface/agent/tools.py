@@ -83,3 +83,23 @@ def metric_distribution(
     explain_area 로 먼저 확인한다.
     """
     return actions.act_metric_distribution(ctx.context, station_id, metric)
+
+
+@function_tool
+def ward_price_ranking(
+    ctx: RunContextWrapper[SessionState],
+    direction: str = "lowest",
+    limit: int = 1,
+    ward: str | None = None,
+) -> dict[str, Any]:
+    """구 단위 시세를 낸다 — 최저/최고 순위이거나, 특정 구 하나.
+
+    "땅값/시세가 가장 낮은/높은 구는 어디야?" 에는 direction("lowest"
+    또는 "highest")으로 답한다. **"○○区 시세는 어때?"처럼 특정 구를
+    물으면 ward 인자에 그 구 이름(반드시 일본어, 예: "港区")을 넣는다** —
+    direction/limit 만으로는 최저·최고 5위 밖의 중간권 구를 조회할 수
+    없다. rank_areas 는 종합점수 순위라 이 질문에 쓸 수 없다.
+    """
+    return actions.act_ward_price_ranking(
+        ctx.context, direction=direction, limit=limit, ward=ward
+    )

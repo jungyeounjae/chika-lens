@@ -369,3 +369,47 @@ def act_compare_areas(state: SessionState, station_ids: Sequence[str]) -> dict[s
             for diff in comparison.differences
         ],
     }
+
+
+def act_metric_distribution(state: SessionState, station_id: str, metric: str) -> dict[str, Any]:
+    """한 지표를 주변 역 지도 색칠용으로 낸다.
+
+    MLIT 서약(스펙 §3.1.2) 때문에 재해위험 등의 원본 Polygon은 지도에 못
+    그린다 — 여기서 내는 값은 원본 구역이 아니라 우리가 정규화한 역 단위
+    percentile 이므로 서약 밖이다. 조건(criteria)이 필요 없다 — 다이얼
+    가중치가 아니라 지표 하나의 순수한 분포를 보는 것이라서다.
+    """
+    try:
+        key = MetricKey(metric)
+    except ValueError:
+        return {
+            "error": "unknown_metric",
+            "metric": metric,
+            "known_metrics": sorted(k.value for k in MetricKey),
+        }
+
+    try:
+        points = state.usecases.distribution.execute(station_id, key)
+    except KeyError:
+        return {"error": "unknown_station", "station_id": station_id}
+
+    return {
+        "metric": key.value,
+        "label": METRIC_LABELS_KO[key],
+        "unit": METRIC_UNITS[key],
+        "is_ward_resolution": key in WARD_RESOLUTION_METRICS,
+        "points": [
+            {
+                "station_id": p.station.id,
+                "name_ja": p.station.name_ja,
+                "ward": p.station.ward,
+                "lat": p.station.lat,
+                "lon": p.station.lon,
+                "percentile": round(p.percentile, 1),
+                "raw_value": display_raw_value(key, p.raw_value),
+                "is_missing": p.is_missing,
+                "distance_m": round(p.distance_m),
+            }
+            for p in points
+        ],
+    }

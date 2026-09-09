@@ -76,6 +76,33 @@ export type MapPin = {
   score?: number;
 };
 
+/** `metric_distribution` 결과 — 한 지표를 역 단위로 지도에 색칠할 재료.
+ *
+ * MLIT 원본 폴리곤(재해위험 등)은 지도에 그릴 수 없다(스펙 §3.1.2) — 이건
+ * 그 대신 우리가 정규화한 역 단위 percentile 이다. `percentile` 은 항상
+ * "높을수록 좋다/안전하다"로 통일돼 있다 — raw_value 의 방향과 반대인
+ * 지표(시세·재해위험·감점 상권)가 있으니 색은 반드시 percentile로 매긴다.
+ */
+export type DistributionPoint = {
+  station_id: string;
+  name_ja: string;
+  ward: string;
+  lat: number;
+  lon: number;
+  percentile: number;
+  raw_value: number | null;
+  is_missing: boolean;
+  distance_m: number;
+};
+
+export type MetricDistribution = {
+  metric: string;
+  label: string;
+  unit: string;
+  is_ward_resolution: boolean;
+  points: DistributionPoint[];
+};
+
 export type ChatEvent =
   | { kind: "text"; delta: string }
   | { kind: "tool"; tool: string; result: unknown }

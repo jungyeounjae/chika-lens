@@ -5,7 +5,13 @@ import dynamic from "next/dynamic";
 import { AreaList } from "@/components/AreaList";
 import { ChatMarkdown } from "@/components/ChatMarkdown";
 import { streamChat } from "@/lib/chatStream";
-import type { ExplainedArea, MapPin, NearbyStation, RankedArea } from "@/lib/types";
+import type {
+  ExplainedArea,
+  MapPin,
+  MetricDistribution,
+  NearbyStation,
+  RankedArea,
+} from "@/lib/types";
 
 // maplibre 는 window 를 참조하므로 서버에서 렌더할 수 없다.
 const AreaMap = dynamic(() => import("@/components/AreaMap").then((m) => m.AreaMap), {
@@ -33,6 +39,9 @@ export default function Home() {
   const [pins, setPins] = useState<MapPin[]>([]);
   const [numbered, setNumbered] = useState(true);
   const [nearby, setNearby] = useState<NearbyStation[]>([]);
+  // metric_distribution 결과. 있는 동안은 지도가 순위 핀 대신 percentile
+  // 색점을 그린다 (AreaMap 참고).
+  const [distribution, setDistribution] = useState<MetricDistribution | null>(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +71,7 @@ export default function Home() {
               setPins(ranked.areas);
               setNumbered(true);
               setNearby([]);
+              setDistribution(null);
               // 랭킹은 이 턴의 응답에 묶는다 — 전역에 두면 다음 턴이 생길 때
               // 화면 맨 아래로 떠밀려 방금 물은 것과 무관해 보인다.
               setTurns((prev) => {
@@ -76,6 +86,13 @@ export default function Home() {
               setPins([single as ExplainedArea]);
               setNumbered(false);
               setNearby(single.nearby ?? []);
+              setDistribution(null);
+            }
+            const dist = event.result as Partial<MetricDistribution> | undefined;
+            if (event.tool === "metric_distribution" && Array.isArray(dist?.points)) {
+              // 분포 모드는 순위/단일 조회 핀과 동시에 뜨면 색의 의미가
+              // 헷갈린다 — AreaMap이 distribution 이 있으면 그것만 그린다.
+              setDistribution(dist as MetricDistribution);
             }
           } else if (event.kind === "text") {
             setTurns((prev) => {
@@ -103,8 +120,30 @@ export default function Home() {
   return (
     <main className="flex h-dvh flex-col md:flex-row">
       {/* 지도 — 모바일에서는 위쪽 40%, 데스크톱에서는 오른쪽 절반 */}
-      <section className="h-2/5 shrink-0 md:order-2 md:h-full md:w-1/2">
-        <AreaMap areas={pins} numbered={numbered} nearby={nearby} />
+      <section className="relative h-2/5 shrink-0 md:order-2 md:h-full md:w-1/2">
+        <AreaMap
+          areas={pins}
+          numbered={numbered}
+          nearby={nearby}
+          distribution={distribution?.points}
+        />
+        {distribution && (
+          <div className="absolute bottom-3 left-3 rounded-lg border border-neutral-200 bg-white/95 px-3 py-2 text-xs shadow dark:border-neutral-700 dark:bg-neutral-900/95">
+            <p className="font-medium">
+              {distribution.label}
+              {distribution.is_ward_resolution && (
+                <span className="ml-1 text-amber-600 dark:text-amber-500">구 단위</span>
+              )}
+            </p>
+            <div className="mt-1 flex items-center gap-1.5">
+              <span className="h-2 w-16 rounded-full bg-gradient-to-r from-red-600 via-yellow-400 to-green-600" />
+            </div>
+            <div className="mt-0.5 flex justify-between text-[10px] text-neutral-500">
+              <span>하위권</span>
+              <span>상위권(좋음)</span>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="flex min-h-0 flex-1 flex-col border-neutral-200 md:order-1 md:w-1/2 md:border-r dark:border-neutral-800">

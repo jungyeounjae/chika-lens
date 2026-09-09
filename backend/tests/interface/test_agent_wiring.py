@@ -27,6 +27,7 @@ def test_analysis_agent_exposes_the_analysis_tools() -> None:
         "lookup_station",
         "explain_area",
         "compare_areas",
+        "metric_distribution",
     }
 
 

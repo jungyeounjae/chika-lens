@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { MapPin, NearbyStation } from "@/lib/types";
+import type { DistributionPoint, MapPin, NearbyStation } from "@/lib/types";
 
 const TOKYO_CENTER: [number, number] = [139.7, 35.69];
 
@@ -27,14 +27,28 @@ const OSM_STYLE = {
   layers: [{ id: "osm", type: "raster" as const, source: "osm" }],
 };
 
+/** percentile(0~100, 높을수록 좋다/안전하다로 통일된 값)을 빨강-노랑-초록으로.
+ *
+ * raw_value 가 아니라 percentile 로 칠한다 — 시세·재해위험·감점 상권은
+ * raw 가 클수록 나쁜데 percentile 은 이미 뒤집혀 있다. raw로 칠하면
+ * 감점 지표에서 색이 거꾸로 나간다.
+ */
+function colorFromPercentile(percentile: number): string {
+  const hue = Math.max(0, Math.min(100, percentile)) * 1.2; // 0=빨강 ~ 120=초록
+  return `hsl(${hue}, 72%, 42%)`;
+}
+
 export function AreaMap({
   areas,
   numbered = true,
   nearby = [],
+  distribution = [],
 }: {
   areas: MapPin[];
   numbered?: boolean;
   nearby?: NearbyStation[];
+  /** metric_distribution 결과. 있으면 areas/nearby 대신 percentile 색점을 그린다. */
+  distribution?: DistributionPoint[];
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
@@ -62,6 +76,36 @@ export function AreaMap({
 
     markers.current.forEach((marker) => marker.remove());
     markers.current = [];
+
+    // 분포 모드가 있으면 그것만 그린다 — 순위 핀과 percentile 색점을 같이
+    // 띄우면 "이 색이 순위인지 지표인지" 헷갈린다.
+    if (distribution.length > 0) {
+      distribution.forEach((point) => {
+        const dot = document.createElement("div");
+        const background = point.is_missing ? "#a3a3a3" : colorFromPercentile(point.percentile);
+        dot.style.cssText =
+          `background:${background};width:22px;height:22px;border-radius:9999px;` +
+          "border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.4);";
+        const valueLine = point.is_missing
+          ? "데이터 없음"
+          : `${point.raw_value ?? "-"} · 상위 ${(100 - point.percentile).toFixed(0)}%`;
+        const marker = new maplibregl.Marker({ element: dot })
+          .setLngLat([point.lon, point.lat])
+          .setPopup(
+            new maplibregl.Popup({ offset: 14 }).setText(
+              `${point.name_ja} (${point.ward}) · ${valueLine}`,
+            ),
+          )
+          .addTo(instance);
+        markers.current.push(marker);
+      });
+
+      const distributionBounds = new maplibregl.LngLatBounds();
+      distribution.forEach((point) => distributionBounds.extend([point.lon, point.lat]));
+      instance.fitBounds(distributionBounds, { padding: 80, maxZoom: 14, duration: 600 });
+      return;
+    }
+
     if (areas.length === 0) return;
 
     areas.forEach((area, index) => {
@@ -114,7 +158,7 @@ export function AreaMap({
       maxZoom: areas.length === 1 ? 13.5 : 14,
       duration: 600,
     });
-  }, [areas, numbered, nearby]);
+  }, [areas, numbered, nearby, distribution]);
 
   return <div ref={container} className="h-full w-full" />;
 }

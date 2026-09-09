@@ -70,3 +70,16 @@ def compare_areas(
 ) -> dict[str, Any]:
     """두 곳 이상을 비교해 차이 나는 축만 반환한다."""
     return actions.act_compare_areas(ctx.context, station_ids)
+
+
+@function_tool
+def metric_distribution(
+    ctx: RunContextWrapper[SessionState], station_id: str, metric: str
+) -> dict[str, Any]:
+    """한 역 주변의 지표 하나를 지도에 색칠할 재료로 낸다 (역 단위 percentile).
+
+    사용자가 "지도로 보여줘", "주변은 어때" 처럼 한 지표의 공간적 분포를
+    물을 때 쓴다. metric 은 내부 키(예: disaster_risk)다 — 모르면
+    explain_area 로 먼저 확인한다.
+    """
+    return actions.act_metric_distribution(ctx.context, station_id, metric)

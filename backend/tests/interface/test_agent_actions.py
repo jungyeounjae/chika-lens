@@ -2,6 +2,7 @@ import pytest
 
 from chika.application.usecase.compare_areas import CompareAreas
 from chika.application.usecase.explain_area import ExplainArea
+from chika.application.usecase.metric_distribution import MetricDistribution
 from chika.application.usecase.rank_areas import RankAreas
 from chika.domain.model.criteria import Household
 from chika.domain.model.metrics import MetricKey, RawMetrics
@@ -17,6 +18,7 @@ from chika.interface.agent.actions import (
     act_compare_areas,
     act_explain_area,
     act_lookup_station,
+    act_metric_distribution,
     act_rank_areas,
     act_set_criteria,
 )
@@ -57,6 +59,7 @@ def _deterministic_state(
             ),
             explain=ExplainArea(areas, FakePriceRepository(prices or {})),
             compare=CompareAreas(areas),
+            distribution=MetricDistribution(areas),
         )
     )
 
@@ -70,6 +73,7 @@ def state() -> SessionState:
             rank=RankAreas(areas, FakeCommuteRepository(commute), FakePriceRepository(prices)),
             explain=ExplainArea(areas, FakePriceRepository(prices)),
             compare=CompareAreas(areas),
+            distribution=MetricDistribution(areas),
         )
     )
 
@@ -673,3 +677,51 @@ def test_a_count_metric_is_left_alone() -> None:
         if item["metric"] == MetricKey.PARK.value
     )
     assert park["raw_value"] == 68.0
+
+
+# --- metric_distribution: 지도 색칠용 역 단위 분포 ---
+
+
+def test_metric_distribution_returns_label_and_unit_from_the_domain() -> None:
+    """지도 배지도 이 label 을 쓴다 — 내부 키가 새면 화면과 서술이 어긋난다."""
+    session = _deterministic_state(
+        [_station("a"), _station("b")],
+        [_raw("a", disaster_risk=1.0), _raw("b", disaster_risk=0.2)],
+    )
+    result = act_metric_distribution(session, "a", "disaster_risk")
+    assert result["label"] == "재해위험"
+    assert result["unit"] == "지수(0~1, 클수록 위험)"
+
+
+def test_metric_distribution_points_carry_percentile_and_raw_value() -> None:
+    session = _deterministic_state(
+        [_station("a"), _station("b")],
+        [_raw("a", disaster_risk=1.0), _raw("b", disaster_risk=0.2)],
+    )
+    result = act_metric_distribution(session, "a", "disaster_risk")
+    points_by_id = {p["station_id"]: p for p in result["points"]}
+    assert points_by_id["a"]["raw_value"] == 1.0
+    # disaster_risk 는 감점 지표라 raw 가 클수록 percentile 은 낮다 (규칙 1-2와 같은 방향).
+    assert points_by_id["a"]["percentile"] < points_by_id["b"]["percentile"]
+
+
+def test_metric_distribution_rejects_an_unknown_metric_key() -> None:
+    """내부 키가 아닌 문자열(한국어 라벨 등)을 넘기면 명확히 실패해야 한다."""
+    session = _deterministic_state([_station("a")], [_raw("a")])
+    result = act_metric_distribution(session, "a", "재해위험")
+    assert result["error"] == "unknown_metric"
+    assert "disaster_risk" in result["known_metrics"]
+
+
+def test_metric_distribution_rejects_an_unknown_station() -> None:
+    session = _deterministic_state([_station("a")], [_raw("a")])
+    result = act_metric_distribution(session, "ghost", "disaster_risk")
+    assert result["error"] == "unknown_station"
+
+
+def test_metric_distribution_does_not_require_criteria() -> None:
+    """가중치가 필요 없다 — set_criteria 없이도 바로 부를 수 있어야 한다."""
+    session = _deterministic_state([_station("a")], [_raw("a", park=5.0)])
+    assert session.criteria is None
+    result = act_metric_distribution(session, "a", "park")
+    assert "error" not in result

@@ -37,6 +37,52 @@ async def test_the_oldest_turns_are_dropped_when_full(session: InMemorySession) 
     assert [i["content"] for i in items] == ["4", "5", "6", "7", "8", "9"]  # type: ignore[index]
 
 
+async def test_trim_never_splits_a_function_call_from_its_output() -> None:
+    """실사용 오류: "No tool call found for function call output with
+    call_id ...". 개수로만 자르면 오래된 턴의 function_call 은 밀려나고
+    바로 다음 function_call_output 은 살아남아 응답 API 가 거부한다."""
+    session = InMemorySession(max_items=5)
+    # 첫 턴: 유저 메시지 + function_call + function_call_output 3개짜리 턴.
+    await session.add_items(
+        [
+            {"role": "user", "content": "first"},
+            {"type": "function_call", "call_id": "c1", "name": "lookup_station"},
+            {"type": "function_call_output", "call_id": "c1", "output": "..."},
+        ]
+    )
+    # 둘째 턴도 3개 — 합쳐서 6개가 되어 상한(5)을 넘는다.
+    await session.add_items(
+        [
+            {"role": "user", "content": "second"},
+            {"type": "function_call", "call_id": "c2", "name": "explain_area"},
+            {"type": "function_call_output", "call_id": "c2", "output": "..."},
+        ]
+    )
+    items = await session.get_items()
+    # 첫 턴이 통째로 잘려 나가고 둘째 턴만 온전히 남아야 한다 — 개수 상한(5)보다
+    # 짝을 지키는 게 우선이라 3개(<=5)로 줄어든다.
+    assert [i.get("content") or i.get("call_id") for i in items] == ["second", "c2", "c2"]
+    call_ids_with_output = {i["call_id"] for i in items if i.get("type") == "function_call_output"}
+    call_ids_with_call = {i["call_id"] for i in items if i.get("type") == "function_call"}
+    assert call_ids_with_output == call_ids_with_call
+
+
+async def test_a_turn_larger_than_the_cap_is_kept_whole() -> None:
+    """상한(3)보다 큰 턴(5개) 하나만 있으면 자를 턴 경계가 없다 — 상한을
+    넘기더라도 그 턴을 통째로 유지한다."""
+    session = InMemorySession(max_items=3)
+    await session.add_items(
+        [
+            {"role": "user", "content": "only"},
+            {"type": "function_call", "call_id": "c1"},
+            {"type": "function_call_output", "call_id": "c1"},
+            {"type": "function_call", "call_id": "c2"},
+            {"type": "function_call_output", "call_id": "c2"},
+        ]
+    )
+    assert len(await session.get_items()) == 5
+
+
 async def test_limit_returns_the_most_recent(session: InMemorySession) -> None:
     for i in range(4):
         await session.add_items([{"role": "user", "content": str(i)}])

@@ -1,4 +1,4 @@
-"""다이얼 5개 → 지표 15개 가중치 전개 (스펙 §6.4의 고정 매핑 표)."""
+"""다이얼 5개 → 지표 15개(+ large_retail) 가중치 전개 (스펙 §6.4의 고정 매핑 표)."""
 
 from __future__ import annotations
 
@@ -19,6 +19,9 @@ DIAL_TO_METRICS: Mapping[Dial, tuple[MetricKey, ...]] = MappingProxyType(
             MetricKey.SUPERMARKET,
             MetricKey.CONVENIENCE_STORE,
             MetricKey.HEALTHCARE,
+            # 光が丘처럼 슈퍼가 2곳뿐이어도 대형 복합몰 하나가 그 역할을
+            # 하는 계획단지 편향(스펙 §11-10)을 종합 점수에도 반영한다.
+            MetricKey.LARGE_RETAIL,
         ),
         Dial.QUALITY_OF_LIFE: (
             MetricKey.CAFE,

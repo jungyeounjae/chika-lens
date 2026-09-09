@@ -63,6 +63,7 @@ backend/data/korean_shops.json
 backend/data/mlit_childcare.json
 backend/data/mlit_prices.json
 backend/data/mlit_hazards.json
+backend/data/mlit_ridership.json
 backend/data/.cache/
 gcloud-service-key.json
 

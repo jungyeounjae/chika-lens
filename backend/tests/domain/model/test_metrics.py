@@ -1,6 +1,8 @@
 import pytest
 
 from chika.domain.model.metrics import (
+    DIRECTIONLESS_METRICS,
+    HAZARD_LAYER_METRICS,
     METRIC_UNITS,
     NEGATIVE_METRICS,
     WARD_RESOLUTION_METRICS,
@@ -10,14 +12,44 @@ from chika.domain.model.metrics import (
 )
 
 
-def test_there_are_exactly_15_metrics() -> None:
-    assert len(MetricKey) == 15
+def test_there_are_exactly_21_metrics() -> None:
+    """15는 스펙 §6.2, +4는 disaster_risk 레이어별 진단용 지표, +1은
+    유동인구(daily_ridership, 다이얼 미반영), +1은 복합쇼핑몰·백화점
+    (large_retail, daily_convenience 다이얼에 반영, metrics.py 참조)."""
+    assert len(MetricKey) == 21
 
 
-def test_negative_metrics_are_the_three_penalty_axes() -> None:
+def test_negative_metrics_are_the_seven_penalty_axes() -> None:
     assert NEGATIVE_METRICS == frozenset(
-        {MetricKey.PRICE_LEVEL, MetricKey.DISASTER_RISK, MetricKey.NUISANCE_VENUE}
+        {
+            MetricKey.PRICE_LEVEL,
+            MetricKey.DISASTER_RISK,
+            MetricKey.NUISANCE_VENUE,
+            *HAZARD_LAYER_METRICS,
+        }
     )
+
+
+def test_hazard_layer_metrics_are_excluded_from_dial_scoring() -> None:
+    """넣으면 같은 위험이 재해위험과 비용·위험 다이얼에 중복 반영돼 점수가 부풀어 오른다."""
+    from chika.domain.service.dials import DIAL_TO_METRICS
+
+    all_dial_metrics = {m for metrics in DIAL_TO_METRICS.values() for m in metrics}
+    assert all_dial_metrics.isdisjoint(HAZARD_LAYER_METRICS)
+
+
+def test_daily_ridership_has_no_direction() -> None:
+    """유동인구가 많은 게 좋은지 적은 게 좋은지는 사용자 취향에 갈린다 —
+    NEGATIVE_METRICS 에 넣는 것도 임의로 방향을 정하는 것과 같다."""
+    assert DIRECTIONLESS_METRICS == frozenset({MetricKey.DAILY_RIDERSHIP})
+    assert MetricKey.DAILY_RIDERSHIP not in NEGATIVE_METRICS
+
+
+def test_daily_ridership_is_excluded_from_dial_scoring() -> None:
+    from chika.domain.service.dials import DIAL_TO_METRICS
+
+    all_dial_metrics = {m for metrics in DIAL_TO_METRICS.values() for m in metrics}
+    assert MetricKey.DAILY_RIDERSHIP not in all_dial_metrics
 
 
 def test_ward_resolution_metric_is_flagged() -> None:

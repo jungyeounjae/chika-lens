@@ -1,7 +1,11 @@
-"""지표 14(재해위험) 인덱스 배치 — MLIT 액상화·홍수·해일·토사재해 4개 레이어.
+"""지표 14(재해위험) + 16~19(레이어별 진단용) 인덱스 배치 —
+MLIT 액상화·홍수·해일·토사재해 4개 레이어.
 
 호출 과금이 없다. 4개 데이터셋을 역세권 좌표를 덮는 타일로 받아
 `HazardIndex`(mlit_hazards.py)에 합치고, 역마다 반경 안 최댓값 위험도를 낸다.
+레이어마다 4개 통합본과 별개로 자기 것만 담은 `HazardIndex`도 또 만든다 —
+"홍수만", "액상화만"처럼 레이어 하나만 물어보는 질문에 재해위험과 겹치지
+않게 답하려는 것이다.
 
 FLOOD(XKT026)만 z=15 를 요구해 타일 수가 다른 3개보다 훨씬 많다 — z=13 대비
 한 변이 4배로 쪼개져 타일 개수가 16배가 된다. 데이터셋마다 캐시 파일을
@@ -40,14 +44,24 @@ from chika.etl.mlit_datasets import (
     STORM_SURGE,
     MlitDataset,
 )
-from chika.etl.mlit_hazards import DECAY_M, HazardIndex, parse_all
+from chika.etl.mlit_hazards import DECAY_M, HazardIndex, HazardZone, parse_all
 
-#: 배치 레이어 키 -> (데이터셋, 파서가 보는 layer 문자열, 캐시 파일명).
-_LAYERS: tuple[tuple[MlitDataset, str, str], ...] = (
-    (LIQUEFACTION, "liquefaction", "mlit_hazard_liquefaction_raw.json"),
-    (FLOOD, "flood", "mlit_hazard_flood_raw.json"),
-    (STORM_SURGE, "storm_surge", "mlit_hazard_storm_surge_raw.json"),
-    (SEDIMENT_HAZARD, "sediment", "mlit_hazard_sediment_raw.json"),
+#: 배치 레이어 키 -> (데이터셋, 파서가 보는 layer 문자열, 캐시 파일명, 레이어 전용 진단 지표).
+_LAYERS: tuple[tuple[MlitDataset, str, str, MetricKey], ...] = (
+    (
+        LIQUEFACTION,
+        "liquefaction",
+        "mlit_hazard_liquefaction_raw.json",
+        MetricKey.LIQUEFACTION_RISK,
+    ),
+    (FLOOD, "flood", "mlit_hazard_flood_raw.json", MetricKey.FLOOD_RISK),
+    (
+        STORM_SURGE,
+        "storm_surge",
+        "mlit_hazard_storm_surge_raw.json",
+        MetricKey.STORM_SURGE_RISK,
+    ),
+    (SEDIMENT_HAZARD, "sediment", "mlit_hazard_sediment_raw.json", MetricKey.SEDIMENT_RISK),
 )
 
 
@@ -68,8 +82,9 @@ def main() -> None:
     stations = _load_stations(args.stations)
     client = MlitClient(_api_key())
 
-    zones = []
-    for dataset, layer, cache_name in _LAYERS:
+    zones: list[HazardZone] = []
+    layer_zones: dict[MetricKey, list[HazardZone]] = {}
+    for dataset, layer, cache_name, layer_metric in _LAYERS:
         cache_path = args.cache_dir / cache_name
         features = _fetch_layer(
             client, stations, dataset, cache_path, args.refresh, args.max_tiles
@@ -77,6 +92,7 @@ def main() -> None:
         parsed = parse_all(features, layer)
         print(f"{dataset.endpoint} ({dataset.label}): {len(features)}건 -> 유효 {len(parsed)}건")
         zones.extend(parsed)
+        layer_zones[layer_metric] = parsed
 
     if args.max_tiles is not None:
         print(
@@ -88,10 +104,18 @@ def main() -> None:
         sys.exit("4개 레이어 전부 0건이다. 타일 범위나 엔드포인트가 어긋났을 수 있다.")
 
     index_tree = HazardIndex(zones)
+    layer_trees = {metric: HazardIndex(z) for metric, z in layer_zones.items()}
     index: dict[str, dict[str, float]] = {}
     for station in stations:
-        risk = index_tree.risk_near(station.lat, station.lon)
-        index[station.id] = {MetricKey.DISASTER_RISK.value: round(risk, 4)}
+        index[station.id] = {
+            MetricKey.DISASTER_RISK.value: round(
+                index_tree.risk_near(station.lat, station.lon), 4
+            ),
+            **{
+                metric.value: round(tree.risk_near(station.lat, station.lon), 4)
+                for metric, tree in layer_trees.items()
+            },
+        }
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")

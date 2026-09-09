@@ -1,4 +1,6 @@
-"""지표 정의. 15개 지표 키의 유일한 정의처."""
+"""지표 정의. 스펙 §6.2 지표 15개 + 다이얼 채점에는 안 들어가는 진단용 5개
+(액상화·홍수·해일·토사재해 4개 + 유동인구 1개) + 다이얼에 반영되는 추가
+지표 1개(복합쇼핑몰·백화점)의 유일한 정의처."""
 
 from __future__ import annotations
 
@@ -10,7 +12,24 @@ NEUTRAL_PERCENTILE = 50.0
 
 
 class MetricKey(StrEnum):
-    """스펙 §6.2의 지표 15개. 순서는 스펙 표의 번호와 같다."""
+    """스펙 §6.2의 지표 15개. 순서는 스펙 표의 번호와 같다.
+
+    16~19(`LIQUEFACTION_RISK`·`FLOOD_RISK`·`STORM_SURGE_RISK`·`SEDIMENT_RISK`)는
+    스펙 §6.2에 없다 — `disaster_risk`(14)는 이 4개 레이어의 **최댓값**이라
+    어느 레이어가 원인인지가 합치는 순간 사라진다. "홍수만", "액상화만"처럼
+    레이어 하나를 따로 물어보는 질문에 답하려고 원래 raw severity를 그대로
+    남겨 둔다. `dials.DIAL_TO_METRICS`에는 일부러 안 넣는다 — 넣으면 같은
+    위험이 재해위험과 비용·위험 다이얼에 여러 번 반영돼 가중치가 부풀고,
+    스펙 §6.2가 정한 15개 밖에서 종합 점수가 바뀐다. `Weights[key]`는
+    매핑에 없는 키를 0으로 돌려주므로(weights.py) 정규화·조회 툴
+    (metric_extremes 등)은 그대로 재사용되면서 점수에는 기여하지 않는다.
+
+    `LARGE_RETAIL`(21, 복합쇼핑몰·백화점)은 위 5개와 다르다 — 진단용이
+    아니라 `dials.DIAL_TO_METRICS`의 `daily_convenience`에 정식으로
+    들어간다. "光が丘처럼 슈퍼 2곳뿐이어도 대형 복합몰 하나가 그 역할을
+    한다"는 계획단지 측정 편향(스펙 §11-10)을 종합 점수에도 반영하려는
+    것이라, 진단만 하고 점수엔 안 넣는 나머지 5개와 존재 이유가 다르다.
+    """
 
     KOREAN_RESTAURANT = "korean_restaurant"          # 1
     KOREAN_GROCERY = "korean_grocery"                # 2
@@ -27,11 +46,39 @@ class MetricKey(StrEnum):
     PRICE_LEVEL = "price_level"                      # 13 (감점)
     DISASTER_RISK = "disaster_risk"                  # 14 (감점)
     NUISANCE_VENUE = "nuisance_venue"                # 15 (감점)
+    LIQUEFACTION_RISK = "liquefaction_risk"          # 16 (감점, 다이얼 미반영·진단용)
+    FLOOD_RISK = "flood_risk"                        # 17 (감점, 다이얼 미반영·진단용)
+    STORM_SURGE_RISK = "storm_surge_risk"            # 18 (감점, 다이얼 미반영·진단용)
+    SEDIMENT_RISK = "sediment_risk"                  # 19 (감점, 다이얼 미반영·진단용)
+    DAILY_RIDERSHIP = "daily_ridership"              # 20 (방향 없음, 다이얼 미반영·진단용)
+    LARGE_RETAIL = "large_retail"                     # 21 (다이얼 반영 — daily_convenience)
 
+
+#: disaster_risk 를 구성하는 4개 레이어별 진단용 지표. 순회할 때 한 곳만
+#: 고치면 되게 묶어 둔다 (build_hazards.py, seed.py 가 이 목록을 쓴다).
+HAZARD_LAYER_METRICS: tuple[MetricKey, ...] = (
+    MetricKey.LIQUEFACTION_RISK,
+    MetricKey.FLOOD_RISK,
+    MetricKey.STORM_SURGE_RISK,
+    MetricKey.SEDIMENT_RISK,
+)
+
+#: "높을수록 좋다/나쁘다"가 없는 지표. `AreaMetrics.percentile`의 문서화된
+#: 불변식("전 지표가 높을수록 좋음")의 유일한 예외다 — 유동인구가 많은 게
+#: 좋은지 적은 게 좋은지는 사용자 취향(번화가 vs 정숙한 동네)에 갈려서
+#: 방향을 미리 정할 수 없다. `NEGATIVE_METRICS`에도 안 넣는다 — 넣으면
+#: "적을수록 좋다"고 임의로 정하는 것과 같다. 그래서 이 지표의 percentile
+#: 은 "높을수록 좋다"가 아니라 **"높을수록 승하차가 많다"**는 뜻일 뿐이다.
+DIRECTIONLESS_METRICS: frozenset[MetricKey] = frozenset({MetricKey.DAILY_RIDERSHIP})
 
 #: 원시값이 높을수록 나쁜 지표. 정규화 단계에서 퍼센타일을 뒤집는다.
 NEGATIVE_METRICS: frozenset[MetricKey] = frozenset(
-    {MetricKey.PRICE_LEVEL, MetricKey.DISASTER_RISK, MetricKey.NUISANCE_VENUE}
+    {
+        MetricKey.PRICE_LEVEL,
+        MetricKey.DISASTER_RISK,
+        MetricKey.NUISANCE_VENUE,
+        *HAZARD_LAYER_METRICS,
+    }
 )
 
 #: 역세권이 아니라 구 단위 해상도인 지표. 화면에 반드시 명시해야 한다 (스펙 §3.2).
@@ -62,6 +109,12 @@ METRIC_LABELS_KO: Mapping[MetricKey, str] = {
     MetricKey.PRICE_LEVEL: "시세",
     MetricKey.DISASTER_RISK: "재해위험",
     MetricKey.NUISANCE_VENUE: "감점 상권",
+    MetricKey.LIQUEFACTION_RISK: "액상화위험",
+    MetricKey.FLOOD_RISK: "홍수위험",
+    MetricKey.STORM_SURGE_RISK: "해일위험",
+    MetricKey.SEDIMENT_RISK: "토사재해위험",
+    MetricKey.DAILY_RIDERSHIP: "유동인구",
+    MetricKey.LARGE_RETAIL: "복합쇼핑몰·백화점",
 }
 
 #: 원시값의 단위. 대부분은 반경 800m 안의 시설 개수지만 셋은 다르다.
@@ -89,6 +142,14 @@ METRIC_UNITS: Mapping[MetricKey, str] = {
     # 아니라서 "%"로 부르면 "42% 확률로 침수"처럼 잘못 읽힌다(mlit_hazards.py).
     MetricKey.DISASTER_RISK: "지수(0~1, 클수록 위험)",
     MetricKey.NUISANCE_VENUE: "곳",
+    # disaster_risk 와 같은 0~1 심각도 척도, 4개 레이어 중 하나만 뗀 값.
+    MetricKey.LIQUEFACTION_RISK: "지수(0~1, 클수록 위험)",
+    MetricKey.FLOOD_RISK: "지수(0~1, 클수록 위험)",
+    MetricKey.STORM_SURGE_RISK: "지수(0~1, 클수록 위험)",
+    MetricKey.SEDIMENT_RISK: "지수(0~1, 클수록 위험)",
+    # 일평균 승하차인원. 대표 레코드 합산(mlit_ridership.py) — 개수가 아니다.
+    MetricKey.DAILY_RIDERSHIP: "명/일",
+    MetricKey.LARGE_RETAIL: "곳",
 }
 
 
@@ -128,7 +189,8 @@ class RawMetrics:
 
 @dataclass(frozen=True)
 class AreaMetrics:
-    """정규화된 퍼센타일(0~100). 전 지표가 '높을수록 좋음'으로 통일되어 있다."""
+    """정규화된 퍼센타일(0~100). `DIRECTIONLESS_METRICS`를 뺀 전 지표가
+    '높을수록 좋음'으로 통일되어 있다."""
 
     station_id: str
     percentile: Mapping[MetricKey, float]

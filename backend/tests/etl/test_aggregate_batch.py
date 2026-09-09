@@ -165,7 +165,7 @@ def test_query_keys_cover_every_aggregate_metric() -> None:
     expected = {
         MetricKey.KOREAN_RESTAURANT, MetricKey.SUPERMARKET, MetricKey.CONVENIENCE_STORE,
         MetricKey.HEALTHCARE, MetricKey.CAFE, MetricKey.PARK, MetricKey.FITNESS,
-        MetricKey.CHILD_FRIENDLY_VENUE, MetricKey.NUISANCE_VENUE,
+        MetricKey.CHILD_FRIENDLY_VENUE, MetricKey.NUISANCE_VENUE, MetricKey.LARGE_RETAIL,
     }
     assert covered == expected
 

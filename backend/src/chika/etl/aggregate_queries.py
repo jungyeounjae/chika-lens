@@ -42,6 +42,10 @@ CORE_QUERIES: Sequence[AggregateQuery] = (
         MetricKey.NUISANCE_VENUE,
         ("storage", "car_repair", "car_wash", "truck_stop"),
     ),
+    # 계획단지 편향 완화(스펙 §11-10) — 반경 800m 개수만 보면 소형 점포가
+    # 흩어진 상권보다 대형 복합몰 하나가 있는 계획단지가 낮게 나온다.
+    # supermarket 과 별도 타입이라 이중 계산이 아니다.
+    AggregateQuery(MetricKey.LARGE_RETAIL, ("shopping_mall", "department_store")),
 )
 
 #: 다양성 지표(10)의 요리 바스켓. 6개월에 한 번만 갱신한다 — 한 동네의 요리

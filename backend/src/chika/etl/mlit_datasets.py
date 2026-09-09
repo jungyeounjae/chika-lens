@@ -72,6 +72,10 @@ STORM_SURGE = MlitDataset("XKT027", "高潮浸水想定", "bs033_storm_surge_are
 SEDIMENT_HAZARD = MlitDataset("XKT029", "土砂災害警戒区域", "bs031_sediment_disaster_alert_area")
 HAZARD_DATASETS: Sequence[MlitDataset] = (LIQUEFACTION, FLOOD, STORM_SURGE, SEDIMENT_HAZARD)
 
+#: 지표 20(유동인구)의 출처. 駅別乗降客数 — Geometry 가 역 지점이 아니라 노선
+#: 구간 LineString 이다 (mlit_ridership.py 가 대표점으로 바꾼다).
+RIDERSHIP = MlitDataset("XKT015", "駅別乗降客数", "bs018_passengers_by_station")
+
 #: XKT006 중 육아·교육 지표에 넣을 학교 종별. 고교·대학·전수학교는 뺀다 —
 #: 아이를 키우는 가구가 통학 거리를 따지는 것은 초등·중학이고, 대학은 오히려
 #: 학생 거리(街)의 신호라 다른 지표와 뜻이 겹친다.

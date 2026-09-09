@@ -55,3 +55,9 @@ select = ["E", "F", "I", "UP", "B", "TID"]
 python_version = "3.12"
 strict = true
 mypy_path = "src"
+
+[[tool.mypy.overrides]]
+# shapely 는 타입 스텁을 배포하지 않는다. etl 배치(mlit_hazards.py)에서만 쓴다 —
+# domain/application 은 이 예외의 영향을 받지 않는다(별도 아키텍처 테스트로 강제).
+module = "shapely.*"
+ignore_missing_imports = true

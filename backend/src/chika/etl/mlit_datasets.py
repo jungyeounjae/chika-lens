@@ -58,6 +58,20 @@ CONDO_LAND_TYPE = "中古マンション等"
 #: 등록부라 학원·어학원이 섞이지 않는다 (스펙 §6.2.5).
 CHILDCARE_DATASETS: Sequence[MlitDataset] = (PRESCHOOL, SCHOOL)
 
+#: 지표 14(재해위험)의 구성. 전부 Polygon — 개수 세기가 아니라 반경 안 겹침
+#: 판정이 필요하다 (mlit_hazards.py).
+#:
+#: `_index` 를 프로브로 확인했다(2026-09-09). XKT026 은 문서 번호만 보고
+#: `bs029`로 짐작했다가 틀렸다 — 실제로는 `bs030`이다. 번호는 신뢰할 수 없고
+#: `_index` 만 신뢰할 수 있다는 이 파일의 원래 취지가 그대로 재현된 사례다.
+LIQUEFACTION = MlitDataset("XKT025", "液状化しやすさ", "bs028_liquefaction_tendency_map")
+FLOOD = MlitDataset(
+    "XKT026", "洪水浸水想定（想定最大規模）", "bs030_flood_area_maximum_scale", zoom=15
+)
+STORM_SURGE = MlitDataset("XKT027", "高潮浸水想定", "bs033_storm_surge_area")
+SEDIMENT_HAZARD = MlitDataset("XKT029", "土砂災害警戒区域", "bs031_sediment_disaster_alert_area")
+HAZARD_DATASETS: Sequence[MlitDataset] = (LIQUEFACTION, FLOOD, STORM_SURGE, SEDIMENT_HAZARD)
+
 #: XKT006 중 육아·교육 지표에 넣을 학교 종별. 고교·대학·전수학교는 뺀다 —
 #: 아이를 키우는 가구가 통학 거리를 따지는 것은 초등·중학이고, 대학은 오히려
 #: 학생 거리(街)의 신호라 다른 지표와 뜻이 겹친다.

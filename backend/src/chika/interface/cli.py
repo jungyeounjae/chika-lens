@@ -43,6 +43,7 @@ def build_real_session(
     korean_shops_path: Path = Path("data/korean_shops.json"),
     childcare_path: Path = Path("data/mlit_childcare.json"),
     prices_path: Path = Path("data/mlit_prices.json"),
+    hazards_path: Path = Path("data/mlit_hazards.json"),
 ) -> SessionState:
     """배치들이 만든 실제 인덱스로 세션을 구성한다.
 
@@ -54,15 +55,15 @@ def build_real_session(
     거래가격에는 임대가 없다. 둘을 같은 것으로 취급하면 화면에 매매 단가가
     월세로 표시된다. 월세는 계속 '데이터 없음'으로 나간다.
 
-    `childcare_path` 는 마지막에 온다. 뒤에 오는 파일이 앞을 덮으므로 MLIT
-    집계가 옛 metrics.json 의 Aggregate 값을 대체한다 — 인덱스를 다시 접기
-    전에도 지표 11 은 MLIT 값으로 나간다.
+    `childcare_path` 는 `prices_path`·`hazards_path` 보다 먼저 온다 — 뒤에 오는
+    파일이 앞을 덮으므로, 순서만 지키면 셋이 서로 다른 지표(11·13·14)를 채워
+    부딪히지 않는다. 인덱스를 다시 접기 전에도 지표 11 은 MLIT 값으로 나간다.
     """
     areas = FileAreaMetricsRepository(
         stations_path,
         metrics_path,
         ward_stats_path,
-        [korean_shops_path, childcare_path, prices_path],
+        [korean_shops_path, childcare_path, prices_path, hazards_path],
     )
     return SessionState(
         usecases=UseCases(

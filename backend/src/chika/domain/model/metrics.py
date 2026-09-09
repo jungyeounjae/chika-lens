@@ -85,9 +85,9 @@ METRIC_UNITS: Mapping[MetricKey, str] = {
     MetricKey.CHILD_FRIENDLY_VENUE: "곳",
     # 매매 ㎡당 단가. 월세가 아니다 (MLIT 거래가격에는 임대가 없다).
     MetricKey.PRICE_LEVEL: "엔/㎡",
-    # 아직 수집하지 않는 지표라 쓰이지 않는다. 지표를 만들 때 함께 확정한다
-    # (스펙 §11-9).
-    MetricKey.DISASTER_RISK: "%",
+    # 액상화·홍수·해일·토사 4개 레이어를 정규화해 합친 심각도. 사건 확률이
+    # 아니라서 "%"로 부르면 "42% 확률로 침수"처럼 잘못 읽힌다(mlit_hazards.py).
+    MetricKey.DISASTER_RISK: "지수(0~1, 클수록 위험)",
     MetricKey.NUISANCE_VENUE: "곳",
 }
 

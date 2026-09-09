@@ -13,6 +13,7 @@ from pathlib import Path
 from chika.application.usecase.compare_areas import CompareAreas
 from chika.application.usecase.explain_area import ExplainArea
 from chika.application.usecase.metric_distribution import MetricDistribution
+from chika.application.usecase.metric_extremes import MetricExtremes
 from chika.application.usecase.rank_areas import RankAreas
 from chika.application.usecase.ward_price import WardPriceRanking
 from chika.infrastructure.fake.repositories import (
@@ -36,6 +37,7 @@ def build_demo_session(count: int = 40) -> SessionState:
             compare=CompareAreas(areas),
             distribution=MetricDistribution(areas),
             ward_price=WardPriceRanking(areas),
+            extremes=MetricExtremes(areas),
         )
     )
 
@@ -76,6 +78,7 @@ def build_real_session(
             compare=CompareAreas(areas),
             distribution=MetricDistribution(areas),
             ward_price=WardPriceRanking(areas),
+            extremes=MetricExtremes(areas),
         )
     )
 

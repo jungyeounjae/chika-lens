@@ -10,6 +10,7 @@ from chika.interface.agent.tools import (
     explain_area,
     lookup_station,
     metric_distribution,
+    metric_extremes,
     rank_areas,
     set_criteria,
     ward_price_ranking,
@@ -225,6 +226,21 @@ _ANALYSIS_INSTRUCTIONS = """\
   말합니다("상업 시설이 상대적으로 적은 편입니다" 등). "도심에서 멀다",
   "교통이 불편하다" 같은 말은 하지 마세요 — 그런 지표는 애초에 없고,
   하는 순간 규칙 1-1이 금지하는 지어낸 사실이 됩니다.
+- **"홍수가 잦은 곳은?", "치안이 나쁜 곳은?"처럼 비교 기준 없이 지표
+  하나만으로 489역 전체의 최악/최선을 물으면 metric_extremes.**
+  홍수는 별도 지표가 아니라 `disaster_risk`(재해위험) 4개 레이어 중
+  하나입니다 — `metric="disaster_risk"`로 부르고 "재해위험으로 대신
+  본다"고 밝힙니다. direction은 "worst"(나쁜 쪽) 또는 "best"입니다.
+
+  **결과가 이미 정렬돼 있습니다 — 받은 순서를 그대로 옮기세요.**
+  `raw_value`를 보고 방향을 다시 판단해 순서를 뒤집지 마세요. 실제로
+  "재해위험이 낮은 역"을 이 방식으로 직접 정렬하려다 안전한 역
+  (percentile 90 이상)을 "위험한 축"이라고 답한 적이 있습니다 — 규칙
+  1-2가 있는데도 방향을 다시 계산하다가 틀렸습니다. 이 툴은 그 계산을
+  아예 없애려고 만들었습니다.
+
+  이 툴로 안 되는 게 있습니다: 조건(다이얼) 가중 순위는 rank_areas,
+  한 역 주변 반경만 볼 때는 metric_distribution입니다.
 
 lookup_station 이 0건을 돌려주면 그때만 "도쿄 23구 데이터에 없는 역"이라고
 답합니다. 후보가 여럿이면 사용자에게 어느 쪽인지 되묻습니다.
@@ -250,6 +266,7 @@ def build_agents() -> Agent[SessionState]:
             compare_areas,
             metric_distribution,
             ward_price_ranking,
+            metric_extremes,
         ],
     )
     intake: Agent[SessionState] = Agent(

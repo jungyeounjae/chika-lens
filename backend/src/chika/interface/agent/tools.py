@@ -103,3 +103,19 @@ def ward_price_ranking(
     return actions.act_ward_price_ranking(
         ctx.context, direction=direction, limit=limit, ward=ward
     )
+
+
+@function_tool
+def metric_extremes(
+    ctx: RunContextWrapper[SessionState],
+    metric: str,
+    direction: str = "worst",
+    limit: int = 5,
+) -> dict[str, Any]:
+    """489역 전체를 지표 하나로 정렬해 최악/최선 N곳을 낸다.
+
+    "홍수가 잦은 곳은?", "치안이 나쁜 곳은?" 처럼 비교 기준 없이 지표
+    하나만으로 극값을 물을 때 쓴다. direction 은 "worst" 또는 "best"다.
+    결과는 이미 정렬돼 있다 — raw_value 를 보고 다시 순서를 뒤집지 않는다.
+    """
+    return actions.act_metric_extremes(ctx.context, metric=metric, direction=direction, limit=limit)

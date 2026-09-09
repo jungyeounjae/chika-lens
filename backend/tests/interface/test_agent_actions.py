@@ -3,6 +3,7 @@ import pytest
 from chika.application.usecase.compare_areas import CompareAreas
 from chika.application.usecase.explain_area import ExplainArea
 from chika.application.usecase.metric_distribution import MetricDistribution
+from chika.application.usecase.metric_extremes import MetricExtremes
 from chika.application.usecase.rank_areas import RankAreas
 from chika.application.usecase.ward_price import WardPriceRanking
 from chika.domain.model.criteria import Household
@@ -20,6 +21,7 @@ from chika.interface.agent.actions import (
     act_explain_area,
     act_lookup_station,
     act_metric_distribution,
+    act_metric_extremes,
     act_rank_areas,
     act_set_criteria,
     act_ward_price_ranking,
@@ -63,6 +65,7 @@ def _deterministic_state(
             compare=CompareAreas(areas),
             distribution=MetricDistribution(areas),
             ward_price=WardPriceRanking(areas),
+            extremes=MetricExtremes(areas),
         )
     )
 
@@ -78,6 +81,7 @@ def state() -> SessionState:
             compare=CompareAreas(areas),
             distribution=MetricDistribution(areas),
             ward_price=WardPriceRanking(areas),
+            extremes=MetricExtremes(areas),
         )
     )
 
@@ -836,3 +840,52 @@ def test_ward_price_ranking_rejects_an_unknown_ward_with_known_wards() -> None:
     result = act_ward_price_ranking(session, ward="가상구")
     assert result["error"] == "unknown_ward"
     assert "足立区" in result["known_wards"]
+
+
+# --- metric_extremes: 489역 전체 최악/최선 (재현: "재해위험이 낮은 역") ---
+
+
+def test_metric_extremes_worst_is_pre_sorted_worst_first() -> None:
+    """LLM이 raw_value 방향을 다시 계산해 뒤집지 않도록, 결과 자체가
+    이미 원하는 순서다."""
+    session = _deterministic_state(
+        [_station("safe"), _station("risky")],
+        [_raw("safe", disaster_risk=0.1), _raw("risky", disaster_risk=1.0)],
+    )
+    result = act_metric_extremes(session, "disaster_risk", direction="worst")
+    assert result["points"][0]["station_id"] == "risky"
+
+
+def test_metric_extremes_best_reverses_order() -> None:
+    session = _deterministic_state(
+        [_station("safe"), _station("risky")],
+        [_raw("safe", disaster_risk=0.1), _raw("risky", disaster_risk=1.0)],
+    )
+    result = act_metric_extremes(session, "disaster_risk", direction="best")
+    assert result["points"][0]["station_id"] == "safe"
+
+
+def test_metric_extremes_returns_label_and_unit() -> None:
+    session = _deterministic_state([_station("a")], [_raw("a", disaster_risk=1.0)])
+    result = act_metric_extremes(session, "disaster_risk")
+    assert result["label"] == "재해위험"
+    assert result["unit"] == "지수(0~1, 클수록 위험)"
+
+
+def test_metric_extremes_rejects_an_unknown_metric() -> None:
+    session = _deterministic_state([_station("a")], [_raw("a")])
+    result = act_metric_extremes(session, "홍수")
+    assert result["error"] == "unknown_metric"
+
+
+def test_metric_extremes_rejects_an_unknown_direction() -> None:
+    session = _deterministic_state([_station("a")], [_raw("a", disaster_risk=1.0)])
+    result = act_metric_extremes(session, "disaster_risk", direction="lowest")
+    assert result["error"] == "unknown_direction"
+
+
+def test_metric_extremes_does_not_require_criteria() -> None:
+    session = _deterministic_state([_station("a")], [_raw("a", disaster_risk=1.0)])
+    assert session.criteria is None
+    result = act_metric_extremes(session, "disaster_risk")
+    assert "error" not in result

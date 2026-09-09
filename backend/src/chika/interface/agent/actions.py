@@ -491,3 +491,59 @@ def act_ward_price_ranking(
         "direction": direction,
         "wards": [_ward_payload(w) for w in selected],
     }
+
+
+#: metric_extremes 한 번에 낼 상한. 489역 전체를 다 보여줄 이유가 없다.
+MAX_EXTREMES_LIMIT = 10
+
+
+def act_metric_extremes(
+    state: SessionState, metric: str, direction: str = "worst", limit: int = 5
+) -> dict[str, Any]:
+    """489역 전체를 지표 하나로 정렬해 최악/최선 N곳을 낸다.
+
+    "홍수가 잦은 곳은?", "치안이 나쁜 곳은?" 처럼 비교 기준(다이얼) 없이
+    지표 하나만으로 극값을 물을 때 쓴다. `metric_distribution`은 한 역
+    반경만, `rank_areas`는 다이얼 가중 종합점수만 낸다 — 어느 쪽도 이
+    질문에 못 쓴다.
+
+    **정렬은 이미 끝나 있다.** `direction="worst"`면 리스트가 이미
+    percentile 오름차순(가장 나쁜 역이 0번)이다. 받은 순서를 그대로
+    옮기면 된다 — raw_value 방향과 대조해서 다시 뒤집지 마세요. 그렇게
+    하다가 안전한 역(percentile 90+)을 "위험한 축"이라고 답한 적이 있다.
+    """
+    try:
+        key = MetricKey(metric)
+    except ValueError:
+        return {
+            "error": "unknown_metric",
+            "metric": metric,
+            "known_metrics": sorted(k.value for k in MetricKey),
+        }
+    if direction not in ("worst", "best"):
+        return {"error": "unknown_direction", "direction": direction}
+
+    capped = max(1, min(limit, MAX_EXTREMES_LIMIT))
+    points = state.usecases.extremes.execute(key, worst_first=direction == "worst", limit=capped)
+    if not points:
+        return {"error": "no_data", "metric": key.value}
+
+    return {
+        "metric": key.value,
+        "label": METRIC_LABELS_KO[key],
+        "unit": METRIC_UNITS[key],
+        "is_ward_resolution": key in WARD_RESOLUTION_METRICS,
+        "direction": direction,
+        "points": [
+            {
+                "station_id": p.station.id,
+                "name_ja": p.station.name_ja,
+                "ward": p.station.ward,
+                "lat": p.station.lat,
+                "lon": p.station.lon,
+                "percentile": round(p.percentile, 1),
+                "raw_value": display_raw_value(key, p.raw_value),
+            }
+            for p in points
+        ],
+    }

@@ -13,7 +13,13 @@ const AreaMap = dynamic(() => import("@/components/AreaMap").then((m) => m.AreaM
   loading: () => <div className="h-full w-full animate-pulse bg-neutral-100 dark:bg-neutral-900" />,
 });
 
-type Turn = { role: "user" | "assistant"; text: string };
+type Turn = {
+  role: "user" | "assistant";
+  text: string;
+  // 랭킹은 그 턴이 만든 것이지 화면 전체가 공유하는 값이 아니다 — 턴에
+  // 직접 묶지 않으면 다음 턴 아래로 떠밀려 내려간다.
+  areas?: RankedArea[];
+};
 
 const EXAMPLES = [
   "한식당이 많고 조용한 동네를 찾고 있어요",
@@ -23,7 +29,6 @@ const EXAMPLES = [
 
 export default function Home() {
   const [turns, setTurns] = useState<Turn[]>([]);
-  const [areas, setAreas] = useState<RankedArea[]>([]);
   // 특정 역 조회는 랭킹이 아니다 — 순위 번호 없이 한 곳만 찍는다.
   const [pins, setPins] = useState<MapPin[]>([]);
   const [numbered, setNumbered] = useState(true);
@@ -32,6 +37,9 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sessionId = useRef(crypto.randomUUID());
+  // 이번 턴이 만든 어시스턴트 메시지의 인덱스. `turns` 클로저가 아니라
+  // 이 카운터로 계산해야 연속 호출에서도 어긋나지 않는다.
+  const turnCount = useRef(0);
 
   const send = useCallback(
     async (message: string) => {
@@ -39,6 +47,10 @@ export default function Home() {
       setBusy(true);
       setError(null);
       setInput("");
+      // 이 턴의 사용자 메시지는 turnCount.current, 어시스턴트 응답은 그 다음
+      // 자리에 놓인다 — push 되기 전에 인덱스를 고정해 둔다.
+      const assistantIndex = turnCount.current + 1;
+      turnCount.current += 2;
       setTurns((prev) => [...prev, { role: "user", text: message }, { role: "assistant", text: "" }]);
 
       try {
@@ -47,14 +59,20 @@ export default function Home() {
             // 스펙 §5.4 — 툴 결과가 먼저 오므로 지도를 서술보다 먼저 그린다.
             const ranked = event.result as { areas?: RankedArea[] } | undefined;
             if (ranked?.areas) {
-              setAreas(ranked.areas);
               setPins(ranked.areas);
               setNumbered(true);
               setNearby([]);
+              // 랭킹은 이 턴의 응답에 묶는다 — 전역에 두면 다음 턴이 생길 때
+              // 화면 맨 아래로 떠밀려 방금 물은 것과 무관해 보인다.
+              setTurns((prev) => {
+                const next = [...prev];
+                const target = next[assistantIndex];
+                if (target) next[assistantIndex] = { ...target, areas: ranked.areas };
+                return next;
+              });
             }
             const single = event.result as Partial<ExplainedArea> | undefined;
             if (single?.station_id && typeof single.lat === "number") {
-              setAreas([]);
               setPins([single as ExplainedArea]);
               setNumbered(false);
               setNearby(single.nearby ?? []);
@@ -62,9 +80,10 @@ export default function Home() {
           } else if (event.kind === "text") {
             setTurns((prev) => {
               const next = [...prev];
-              next[next.length - 1] = {
+              next[assistantIndex] = {
+                ...next[assistantIndex],
                 role: "assistant",
-                text: next[next.length - 1].text + event.delta,
+                text: next[assistantIndex].text + event.delta,
               };
               return next;
             });
@@ -121,15 +140,20 @@ export default function Home() {
                     {turn.text}
                   </div>
                 ) : turn.text ? (
-                  <ChatMarkdown text={turn.text} />
+                  <>
+                    <ChatMarkdown text={turn.text} />
+                    {turn.areas && turn.areas.length > 0 && (
+                      <div className="mt-2 text-left">
+                        <AreaList areas={turn.areas} />
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div className="text-sm leading-relaxed">{placeholder}</div>
                 )}
               </div>
             );
           })}
-
-          <AreaList areas={areas} />
 
           {error && (
             <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950 dark:text-rose-300">

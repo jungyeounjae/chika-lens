@@ -12,8 +12,6 @@ export type MetricDriver = {
   top_percent: number;
   is_ward_resolution: boolean;
   is_missing: boolean;
-  /** 값을 오해할 여지가 있는 지표의 주의문. 없으면 null. */
-  caveat: string | null;
 };
 
 export type RankedArea = {

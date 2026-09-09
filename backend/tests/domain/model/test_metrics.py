@@ -39,16 +39,6 @@ def test_area_metrics_requires_all_15_percentiles() -> None:
         )
 
 
-def test_area_metrics_reports_ward_resolution() -> None:
-    area = AreaMetrics(
-        station_id="s1",
-        percentile={key: 50.0 for key in MetricKey},
-        missing=frozenset(),
-    )
-    assert area.is_ward_resolution(MetricKey.KOREAN_RESIDENT_RATIO) is True
-    assert area.is_ward_resolution(MetricKey.CAFE) is False
-
-
 def test_every_metric_has_a_unit() -> None:
     """지표를 추가하고 단위를 잊으면 KeyError 가 아니라 여기서 걸린다.
 

@@ -138,6 +138,3 @@ class AreaMetrics:
         absent = [key for key in MetricKey if key not in self.percentile]
         if absent:
             raise ValueError(f"missing percentile for: {[k.value for k in absent]}")
-
-    def is_ward_resolution(self, key: MetricKey) -> bool:
-        return key in WARD_RESOLUTION_METRICS

@@ -4,13 +4,13 @@
 
 ## 개요
 
-Google Places Insights(BigQuery)와 일본 공공데이터를 활용하여 도쿄 역세권을
-한국인 관점으로 정량 평가하고, OpenAI Agents SDK 기반 대화형 에이전트로
-지역 추천을 제공합니다.
+Google Places Aggregate API·国土交通省 不動産情報ライブラリ(MLIT)·일본 공공데이터를
+활용하여 도쿄 역세권을 한국인 관점으로 정량 평가하고, OpenAI Agents SDK 기반
+대화형 에이전트로 지역 추천을 제공합니다.
 
 - **범위**: 도쿄 23구
 - **성격**: 학습·포트폴리오 프로토타입
-- **스택**: Python(에이전트·분석) + Next.js(채팅·지도) + BigQuery
+- **스택**: Python(에이전트·분석) + Next.js(채팅·지도)
 
 ## 구조
 
@@ -24,8 +24,7 @@ frontend/                Next.js 채팅 인터페이스
 
 - [2026-09-03-chika-lens-design.md](docs/superpowers/specs/2026-09-03-chika-lens-design.md)
 
-## 다음 단계
+## 남은 일
 
-1. GCP 개인 프로젝트 설정
-2. Places Insights 샘플 데이터 신청
-3. ~~Phase 0: 도메인 모델 + 스코어링 구현~~ — 완료. 계획: [2026-09-03-chika-lens-phase0.md](docs/superpowers/plans/2026-09-03-chika-lens-phase0.md)
+설계서 [§11 미결 사항](docs/superpowers/specs/2026-09-03-chika-lens-design.md)이
+단일 출처다 — 여기서 목록을 따로 유지하지 않는다.

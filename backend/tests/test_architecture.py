@@ -85,8 +85,8 @@ def test_application_imports_only_domain_and_stdlib() -> None:
     """application은 domain과 표준 라이브러리만 쓸 수 있다 (스펙 §4).
 
     domain 계층에 적용하는 것과 동일한 stdlib 허용 목록 검사다. 이게 없으면
-    유스케이스 안에 `import requests`나 `from google.cloud import bigquery`가
-    섞여도 아키텍처 테스트가 통과한다 — Phase 1 BigQuery 클라이언트가 새는 구멍이다.
+    유스케이스 안에 `import requests`나 외부 API 클라이언트가 섞여도 아키텍처
+    테스트가 통과한다 — 유스케이스는 포트(Protocol)로만 인프라를 알아야 한다.
     """
     violations: list[str] = []
     for path in _modules("application"):
@@ -122,11 +122,11 @@ def test_infrastructure_does_not_import_interface() -> None:
 def test_interface_does_not_import_infrastructure_outside_the_composition_root() -> None:
     """interface -> infrastructure도 반대 방향 위반이다.
 
-    유일한 예외는 `_COMPOSITION_ROOT`(interface/cli.py) 하나뿐이다 — Phase 0
-    데모가 구체 Fake 리포지토리를 조립해 UseCases에 주입하는 합성 루트로,
-    README의 "Phase 0 데모" 절이 이 역할을 명시하고 있다. 그 밖의 interface
-    코드(특히 agent/*, LLM 어댑터)는 infrastructure를 몰라야 한다 — 몰라야
-    Phase 1에서 BigQuery 어댑터로 교체될 때 에이전트 쪽 코드가 흔들리지 않는다.
+    유일한 예외는 `_COMPOSITION_ROOT`(interface/cli.py) 하나뿐이다 — 구체
+    리포지토리를 조립해 UseCases에 주입하는 합성 루트이기 때문이다. 그 밖의
+    interface 코드(특히 agent/*, LLM 어댑터)는 infrastructure를 몰라야 한다 —
+    몰라야 리포지토리 구현을 바꿔도(Fake -> File, 또는 다른 어댑터) 에이전트
+    쪽 코드가 흔들리지 않는다.
     """
     violations: list[str] = []
     for path in _modules("interface"):

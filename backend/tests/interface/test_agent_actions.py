@@ -651,7 +651,7 @@ def test_the_interpretation_is_readable_not_internal_keys(state: SessionState) -
     """"신혼부부" 를 무엇으로 읽었는지 밝히지 않으면 사용자가 고칠 수 없다."""
     interpretation = act_set_criteria(state, household="couple")["interpretation"]
     assert interpretation["household"] == "부부·2인 가구"
-    assert "보육·교육" in interpretation["focus_metrics"]
+    assert "보육시설" in interpretation["focus_metrics"]
     assert all(dial["label"] != dial["dial"] for dial in interpretation["active_dials"])
 
 
@@ -665,11 +665,11 @@ def test_explain_carries_the_criteria_it_was_computed_with() -> None:
 
 
 def test_a_dial_the_household_zeroes_is_absent_from_the_focus() -> None:
-    """1인 가구에서 보육·교육은 가중치 0 이라 근거로 들면 안 된다."""
+    """1인 가구에서 보육시설은 가중치 0 이라 근거로 들면 안 된다."""
     session = _persona_state()
     act_set_criteria(session, household="single")
     detail = act_explain_area(session, "a")
-    assert "보육·교육" not in detail["criteria"]["focus_metrics"]
+    assert "보육시설" not in detail["criteria"]["focus_metrics"]
 
 
 def test_a_ratio_metric_is_reported_as_a_percentage() -> None:

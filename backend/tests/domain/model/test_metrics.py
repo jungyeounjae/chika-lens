@@ -12,11 +12,11 @@ from chika.domain.model.metrics import (
 )
 
 
-def test_there_are_exactly_21_metrics() -> None:
+def test_there_are_exactly_23_metrics() -> None:
     """15는 스펙 §6.2, +4는 disaster_risk 레이어별 진단용 지표, +1은
-    유동인구(daily_ridership, 다이얼 미반영), +1은 복합쇼핑몰·백화점
-    (large_retail, daily_convenience 다이얼에 반영, metrics.py 참조)."""
-    assert len(MetricKey) == 21
+    유동인구(daily_ridership, 다이얼 미반영), +3은 다이얼에 반영되는 추가
+    지표(large_retail·elementary_school·middle_school, metrics.py 참조)."""
+    assert len(MetricKey) == 23
 
 
 def test_negative_metrics_are_the_seven_penalty_axes() -> None:

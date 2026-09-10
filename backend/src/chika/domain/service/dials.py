@@ -32,6 +32,10 @@ DIAL_TO_METRICS: Mapping[Dial, tuple[MetricKey, ...]] = MappingProxyType(
         Dial.FAMILY: (
             MetricKey.CHILDCARE_EDUCATION,
             MetricKey.CHILD_FRIENDLY_VENUE,
+            # 원래 CHILDCARE_EDUCATION 하나에 합쳐져 있던 초등·중학교를 분리했다
+            # (2026-09-10) — "초등학교 몇 개?" 질문에 답하려면 유치원과 섞이면 안 된다.
+            MetricKey.ELEMENTARY_SCHOOL,
+            MetricKey.MIDDLE_SCHOOL,
         ),
         Dial.COST_RISK: (
             MetricKey.PRICE_LEVEL,

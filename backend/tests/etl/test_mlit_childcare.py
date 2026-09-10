@@ -10,6 +10,7 @@ from chika.etl.mlit_childcare import (
     parse_preschool,
     parse_school,
 )
+from chika.etl.mlit_datasets import ELEMENTARY_SCHOOL_KINDS, MIDDLE_SCHOOL_KINDS
 
 
 def _feature(properties: dict[str, object], lat: float = 35.7, lon: float = 139.7) -> dict:  # type: ignore[type-arg]
@@ -62,6 +63,23 @@ def test_elementary_and_junior_high_are_counted() -> None:
     for kind in ("小学校", "中学校", "義務教育学校"):
         facility = parse_school(_feature({"_id": "a", "P29_003_name_ja": kind}))
         assert facility is not None, kind
+
+
+def test_elementary_school_kinds_include_the_compulsory_combined_school() -> None:
+    """義務教育学校(초중일관교)는 전기과정(초등 해당)을 포함하므로 초등학교
+    집계에도 들어가야 한다 — 안 넣으면 그 학교 학생 절반의 통학 거리를
+    빼먹는 셈이다."""
+    assert ELEMENTARY_SCHOOL_KINDS == {"小学校", "義務教育学校"}
+
+
+def test_middle_school_kinds_include_the_compulsory_combined_school() -> None:
+    assert MIDDLE_SCHOOL_KINDS == {"中学校", "義務教育学校"}
+
+
+def test_elementary_and_middle_kinds_do_not_overlap_on_the_plain_kinds() -> None:
+    """순수 小学校/中学校는 서로 안 섞인다 — 義務教育学校만 양쪽에 걸친다."""
+    assert "小学校" not in MIDDLE_SCHOOL_KINDS
+    assert "中学校" not in ELEMENTARY_SCHOOL_KINDS
 
 
 def test_high_schools_and_universities_are_not_counted() -> None:

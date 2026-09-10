@@ -80,3 +80,9 @@ RIDERSHIP = MlitDataset("XKT015", "駅別乗降客数", "bs018_passengers_by_sta
 #: 아이를 키우는 가구가 통학 거리를 따지는 것은 초등·중학이고, 대학은 오히려
 #: 학생 거리(街)의 신호라 다른 지표와 뜻이 겹친다.
 SCHOOL_KINDS_COUNTED: frozenset[str] = frozenset({"小学校", "中学校", "義務教育学校"})
+
+#: 지표 22·23(초등학교·중학교) 분리 기준. 義務教育学校(초중일관교)는 전기과정
+#: (초등 해당)과 후기과정(중학 해당)을 한 시설이 같이 운영해서, 둘 중 하나로만
+#: 넣으면 그 학교 학생 절반의 통학 거리를 빼먹는 셈이다 — 양쪽에 다 센다.
+ELEMENTARY_SCHOOL_KINDS: frozenset[str] = frozenset({"小学校", "義務教育学校"})
+MIDDLE_SCHOOL_KINDS: frozenset[str] = frozenset({"中学校", "義務教育学校"})

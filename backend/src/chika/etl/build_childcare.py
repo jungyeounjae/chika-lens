@@ -32,7 +32,13 @@ from chika.etl.mlit_childcare import (
     parse_school,
 )
 from chika.etl.mlit_client import MlitApiError, MlitClient, tiles_covering
-from chika.etl.mlit_datasets import PRESCHOOL, SCHOOL, TILE_ZOOM
+from chika.etl.mlit_datasets import (
+    ELEMENTARY_SCHOOL_KINDS,
+    MIDDLE_SCHOOL_KINDS,
+    PRESCHOOL,
+    SCHOOL,
+    TILE_ZOOM,
+)
 
 
 def main() -> None:
@@ -60,32 +66,42 @@ def main() -> None:
     else:
         print(f"캐시 사용: {args.cache}")
 
-    facilities = deduplicate(
-        [f for item in raw[PRESCHOOL.endpoint] if (f := parse_preschool(item))]
-        + [f for item in raw[SCHOOL.endpoint] if (f := parse_school(item))]
-    )
-    _report(raw, facilities)
+    # 타일 경계가 겹쳐서 같은 시설이 여러 번 오므로, 데이터셋마다 따로
+    # 중복 제거한다 — 두 데이터셋의 시설 id 는 서로 다른 출처라 안 섞인다.
+    preschools = deduplicate(f for item in raw[PRESCHOOL.endpoint] if (f := parse_preschool(item)))
+    schools = deduplicate(f for item in raw[SCHOOL.endpoint] if (f := parse_school(item)))
+    _report(raw, preschools + schools)
 
-    if not facilities:
+    if not preschools and not schools:
         sys.exit("집계 대상 시설이 0건이다. 필터가 실제 종별과 어긋났을 수 있다.")
 
-    counts = count_near(stations, facilities, STATION_RADIUS_METERS)
-    index = {
-        station_id: {MetricKey.CHILDCARE_EDUCATION.value: float(count)}
-        for station_id, count in counts.items()
+    # 유치원·보육시설(11), 초등학교(22), 중학교(23) — 원래 하나로 합쳐 세던 것을
+    # 종별로 나눈다. 義務教育学校는 초등·중학 양쪽에 다 들어간다(mlit_datasets.py).
+    elementary = [f for f in schools if f.kind in ELEMENTARY_SCHOOL_KINDS]
+    middle = [f for f in schools if f.kind in MIDDLE_SCHOOL_KINDS]
+
+    counts_by_metric = {
+        MetricKey.CHILDCARE_EDUCATION: count_near(stations, preschools, STATION_RADIUS_METERS),
+        MetricKey.ELEMENTARY_SCHOOL: count_near(stations, elementary, STATION_RADIUS_METERS),
+        MetricKey.MIDDLE_SCHOOL: count_near(stations, middle, STATION_RADIUS_METERS),
     }
+    index: dict[str, dict[str, float]] = {station.id: {} for station in stations}
+    for metric, counts in counts_by_metric.items():
+        for station_id, count in counts.items():
+            index[station_id][metric.value] = float(count)
+
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(
         json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    by_station = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
     names = {s.id: s.name_ja for s in stations}
-    top = ", ".join(f"{names[i]} {c}" for i, c in by_station[:5])
-    zeros = sum(1 for _, c in by_station if c == 0)
-    print(f"\n역 {len(counts)}개에 기록 -> {args.out}")
-    print(f"  최다: {top}")
-    print(f"  0건인 역: {zeros}개")
+    print(f"\n역 {len(index)}개에 기록 -> {args.out}")
+    for metric, counts in counts_by_metric.items():
+        by_station = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
+        top = ", ".join(f"{names[i]} {c}" for i, c in by_station[:5])
+        zeros = sum(1 for _, c in by_station if c == 0)
+        print(f"  {metric.value}: 최다 {top} / 0건 {zeros}개 역")
 
 
 def _fetch(

@@ -23,13 +23,17 @@ def test_dial_mapping_matches_spec() -> None:
     assert DIAL_TO_METRICS[Dial.FAMILY] == (
         MetricKey.CHILDCARE_EDUCATION,
         MetricKey.CHILD_FRIENDLY_VENUE,
+        MetricKey.ELEMENTARY_SCHOOL,
+        MetricKey.MIDDLE_SCHOOL,
     )
 
 
 def test_single_dial_spreads_evenly_over_its_metrics() -> None:
     weights = expand_dials(DialSettings({Dial.FAMILY: 1.0}))
-    assert weights[MetricKey.CHILDCARE_EDUCATION] == pytest.approx(0.5)
-    assert weights[MetricKey.CHILD_FRIENDLY_VENUE] == pytest.approx(0.5)
+    assert weights[MetricKey.CHILDCARE_EDUCATION] == pytest.approx(0.25)
+    assert weights[MetricKey.CHILD_FRIENDLY_VENUE] == pytest.approx(0.25)
+    assert weights[MetricKey.ELEMENTARY_SCHOOL] == pytest.approx(0.25)
+    assert weights[MetricKey.MIDDLE_SCHOOL] == pytest.approx(0.25)
     assert weights[MetricKey.CAFE] == 0.0
 
 

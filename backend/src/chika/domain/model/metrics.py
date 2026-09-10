@@ -29,6 +29,14 @@ class MetricKey(StrEnum):
     들어간다. "光が丘처럼 슈퍼 2곳뿐이어도 대형 복합몰 하나가 그 역할을
     한다"는 계획단지 측정 편향(스펙 §11-10)을 종합 점수에도 반영하려는
     것이라, 진단만 하고 점수엔 안 넣는 나머지 5개와 존재 이유가 다르다.
+
+    `ELEMENTARY_SCHOOL`·`MIDDLE_SCHOOL`(22·23)은 원래 `CHILDCARE_EDUCATION`
+    (11) 하나에 합쳐져 있던 MLIT XKT006(学校) 학교 종별을 쪼갠 것이다 —
+    "초등학교 몇 개?"에 답하려면 유치원·보육시설과 초등·중학교가 같은
+    숫자에 섞여 있으면 안 된다. `CHILDCARE_EDUCATION`은 이제 유치원·
+    보육시설(XKT007)만 센다. 셋 다 `family` 다이얼에 들어간다 —
+    `LARGE_RETAIL`과 같은 이유로, 진단용이 아니라 실제 종합 점수에
+    반영해야 하는 값이다.
     """
 
     KOREAN_RESTAURANT = "korean_restaurant"          # 1
@@ -52,6 +60,8 @@ class MetricKey(StrEnum):
     SEDIMENT_RISK = "sediment_risk"                  # 19 (감점, 다이얼 미반영·진단용)
     DAILY_RIDERSHIP = "daily_ridership"              # 20 (방향 없음, 다이얼 미반영·진단용)
     LARGE_RETAIL = "large_retail"                     # 21 (다이얼 반영 — daily_convenience)
+    ELEMENTARY_SCHOOL = "elementary_school"           # 22 (다이얼 반영 — family)
+    MIDDLE_SCHOOL = "middle_school"                   # 23 (다이얼 반영 — family)
 
 
 #: disaster_risk 를 구성하는 4개 레이어별 진단용 지표. 순회할 때 한 곳만
@@ -104,7 +114,8 @@ METRIC_LABELS_KO: Mapping[MetricKey, str] = {
     MetricKey.PARK: "공원",
     MetricKey.FITNESS: "피트니스",
     MetricKey.RESTAURANT_VARIETY: "음식점 다양성",
-    MetricKey.CHILDCARE_EDUCATION: "보육·교육",
+    # 유치원·보육시설만(XKT007). 초등·중학교는 22·23으로 분리했다.
+    MetricKey.CHILDCARE_EDUCATION: "보육시설",
     MetricKey.CHILD_FRIENDLY_VENUE: "아이 동반 시설",
     MetricKey.PRICE_LEVEL: "시세",
     MetricKey.DISASTER_RISK: "재해위험",
@@ -115,6 +126,8 @@ METRIC_LABELS_KO: Mapping[MetricKey, str] = {
     MetricKey.SEDIMENT_RISK: "토사재해위험",
     MetricKey.DAILY_RIDERSHIP: "유동인구",
     MetricKey.LARGE_RETAIL: "복합쇼핑몰·백화점",
+    MetricKey.ELEMENTARY_SCHOOL: "초등학교",
+    MetricKey.MIDDLE_SCHOOL: "중학교",
 }
 
 #: 원시값의 단위. 대부분은 반경 800m 안의 시설 개수지만 셋은 다르다.
@@ -150,6 +163,8 @@ METRIC_UNITS: Mapping[MetricKey, str] = {
     # 일평균 승하차인원. 대표 레코드 합산(mlit_ridership.py) — 개수가 아니다.
     MetricKey.DAILY_RIDERSHIP: "명/일",
     MetricKey.LARGE_RETAIL: "곳",
+    MetricKey.ELEMENTARY_SCHOOL: "곳",
+    MetricKey.MIDDLE_SCHOOL: "곳",
 }
 
 

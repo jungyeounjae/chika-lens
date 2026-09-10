@@ -7,9 +7,7 @@ append하고 재실행 시 남은 것만 이어받는다.
 사용법:
 
     export GOOGLE_MAPS_API_KEY=...
-    uv run python -m chika.etl.build_metrics --core        # 코어 9지표 (월 1회)
-    uv run python -m chika.etl.build_metrics --diversity   # 요리 8종 (6개월 1회)
-    uv run python -m chika.etl.build_metrics --core --diversity --max-calls 9000
+    uv run python -m chika.etl.build_metrics --core        # 코어 지표 (월 1회)
 """
 
 from __future__ import annotations
@@ -34,13 +32,12 @@ from chika.etl.aggregate_batch import (
     remaining_budget,
 )
 from chika.etl.aggregate_client import AggregateApiError, AggregateClient
-from chika.etl.aggregate_queries import CORE_QUERIES, CUISINE_BASKET, AggregateQuery
+from chika.etl.aggregate_queries import CORE_QUERIES, AggregateQuery
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--core", action="store_true", help="코어 9지표")
-    parser.add_argument("--diversity", action="store_true", help="요리 바스켓 8종")
+    parser.add_argument("--core", action="store_true", help="코어 지표")
     parser.add_argument("--stations", type=Path, default=Path("data/stations.json"))
     parser.add_argument("--out", type=Path, default=Path("data/metrics.json"))
     parser.add_argument(
@@ -57,14 +54,10 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="콜 수만 계산하고 끝낸다")
     args = parser.parse_args()
 
-    if not (args.core or args.diversity):
-        parser.error("--core / --diversity 중 하나 이상을 지정한다")
+    if not args.core:
+        parser.error("--core 를 지정한다")
 
-    queries: list[AggregateQuery] = []
-    if args.core:
-        queries.extend(CORE_QUERIES)
-    if args.diversity:
-        queries.extend(CUISINE_BASKET)
+    queries: list[AggregateQuery] = list(CORE_QUERIES)
 
     stations = json.loads(args.stations.read_text(encoding="utf-8"))
     coords = {s["id"]: (s["lat"], s["lon"]) for s in stations}

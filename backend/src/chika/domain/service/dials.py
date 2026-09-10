@@ -27,7 +27,6 @@ DIAL_TO_METRICS: Mapping[Dial, tuple[MetricKey, ...]] = MappingProxyType(
             MetricKey.CAFE,
             MetricKey.PARK,
             MetricKey.FITNESS,
-            MetricKey.RESTAURANT_VARIETY,
         ),
         Dial.FAMILY: (
             MetricKey.CHILDCARE_EDUCATION,

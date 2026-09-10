@@ -1,6 +1,7 @@
-"""지표 정의. 스펙 §6.2 지표 15개 + 다이얼 채점에는 안 들어가는 진단용 5개
-(액상화·홍수·해일·토사재해 4개 + 유동인구 1개) + 다이얼에 반영되는 추가
-지표 1개(복합쇼핑몰·백화점)의 유일한 정의처."""
+"""지표 정의. 스펙 §6.2 지표 15개 중 14개(음식점 다양성은 2026-09-10 제거)
++ 다이얼 채점에는 안 들어가는 진단용 6개(액상화·홍수·해일·토사재해 4개 +
+유동인구·주거전용지역 비율 2개) + 다이얼에 반영되는 추가 지표 3개
+(복합쇼핑몰·백화점, 초등학교, 중학교)의 유일한 정의처."""
 
 from __future__ import annotations
 
@@ -12,7 +13,8 @@ NEUTRAL_PERCENTILE = 50.0
 
 
 class MetricKey(StrEnum):
-    """스펙 §6.2의 지표 15개. 순서는 스펙 표의 번호와 같다.
+    """스펙 §6.2의 지표 15개 중 14개(10번 음식점 다양성은 결번). 순서는
+    스펙 표의 번호와 같다.
 
     16~19(`LIQUEFACTION_RISK`·`FLOOD_RISK`·`STORM_SURGE_RISK`·`SEDIMENT_RISK`)는
     스펙 §6.2에 없다 — `disaster_risk`(14)는 이 4개 레이어의 **최댓값**이라
@@ -37,6 +39,12 @@ class MetricKey(StrEnum):
     보육시설(XKT007)만 센다. 셋 다 `family` 다이얼에 들어간다 —
     `LARGE_RETAIL`과 같은 이유로, 진단용이 아니라 실제 종합 점수에
     반영해야 하는 값이다.
+
+    `RESIDENTIAL_ZONE_RATIO`(24)는 "조용함"을 직접 재는 지표가 없어서
+    만든 대리 지표다 — MLIT XKT002(用途地域)에서 법적으로 상가·공장이
+    금지된 住居専用地域(1~4번)이 역 반경 800m 안에서 차지하는 면적
+    비율이다. `DAILY_RIDERSHIP`과 같은 이유로 진단용이고 다이얼에
+    안 들어간다 — 조용한 게 좋은지 번화가가 좋은지는 사용자 취향이다.
     """
 
     KOREAN_RESTAURANT = "korean_restaurant"          # 1
@@ -48,7 +56,10 @@ class MetricKey(StrEnum):
     CAFE = "cafe"                                    # 7
     PARK = "park"                                    # 8
     FITNESS = "fitness"                              # 9
-    RESTAURANT_VARIETY = "restaurant_variety"        # 10
+    # 10(음식점 다양성)은 결번이다 — 2026-09-10 제거. Aggregate 8종 콜
+    # 배치를 끝내 한 번도 안 돌려 489역 전부가 영원히 결측이었고, 그
+    # 결측 표시 자체가 매 답변에 잡음을 더했다. 나머지 번호는 스펙
+    # §6.2 원문 번호와 맞추려고 당기지 않는다.
     CHILDCARE_EDUCATION = "childcare_education"      # 11
     CHILD_FRIENDLY_VENUE = "child_friendly_venue"    # 12
     PRICE_LEVEL = "price_level"                      # 13 (감점)
@@ -62,6 +73,7 @@ class MetricKey(StrEnum):
     LARGE_RETAIL = "large_retail"                     # 21 (다이얼 반영 — daily_convenience)
     ELEMENTARY_SCHOOL = "elementary_school"           # 22 (다이얼 반영 — family)
     MIDDLE_SCHOOL = "middle_school"                   # 23 (다이얼 반영 — family)
+    RESIDENTIAL_ZONE_RATIO = "residential_zone_ratio" # 24 (방향 없음, 다이얼 미반영·진단용)
 
 
 #: disaster_risk 를 구성하는 4개 레이어별 진단용 지표. 순회할 때 한 곳만
@@ -74,12 +86,17 @@ HAZARD_LAYER_METRICS: tuple[MetricKey, ...] = (
 )
 
 #: "높을수록 좋다/나쁘다"가 없는 지표. `AreaMetrics.percentile`의 문서화된
-#: 불변식("전 지표가 높을수록 좋음")의 유일한 예외다 — 유동인구가 많은 게
+#: 불변식("전 지표가 높을수록 좋음")의 예외다 — 유동인구가 많은 게
 #: 좋은지 적은 게 좋은지는 사용자 취향(번화가 vs 정숙한 동네)에 갈려서
 #: 방향을 미리 정할 수 없다. `NEGATIVE_METRICS`에도 안 넣는다 — 넣으면
 #: "적을수록 좋다"고 임의로 정하는 것과 같다. 그래서 이 지표의 percentile
 #: 은 "높을수록 좋다"가 아니라 **"높을수록 승하차가 많다"**는 뜻일 뿐이다.
-DIRECTIONLESS_METRICS: frozenset[MetricKey] = frozenset({MetricKey.DAILY_RIDERSHIP})
+#: `RESIDENTIAL_ZONE_RATIO`도 같은 이유로 여기 있다 — 주거전용지역
+#: 비율이 높은 게 좋은지(조용함을 원하는 사람) 낮은 게 좋은지(번화가를
+#: 원하는 사람)는 취향이지 사실이 아니다.
+DIRECTIONLESS_METRICS: frozenset[MetricKey] = frozenset(
+    {MetricKey.DAILY_RIDERSHIP, MetricKey.RESIDENTIAL_ZONE_RATIO}
+)
 
 #: 원시값이 높을수록 나쁜 지표. 정규화 단계에서 퍼센타일을 뒤집는다.
 NEGATIVE_METRICS: frozenset[MetricKey] = frozenset(
@@ -113,7 +130,6 @@ METRIC_LABELS_KO: Mapping[MetricKey, str] = {
     MetricKey.CAFE: "카페",
     MetricKey.PARK: "공원",
     MetricKey.FITNESS: "피트니스",
-    MetricKey.RESTAURANT_VARIETY: "음식점 다양성",
     # 유치원·보육시설만(XKT007). 초등·중학교는 22·23으로 분리했다.
     MetricKey.CHILDCARE_EDUCATION: "보육시설",
     MetricKey.CHILD_FRIENDLY_VENUE: "아이 동반 시설",
@@ -128,6 +144,7 @@ METRIC_LABELS_KO: Mapping[MetricKey, str] = {
     MetricKey.LARGE_RETAIL: "복합쇼핑몰·백화점",
     MetricKey.ELEMENTARY_SCHOOL: "초등학교",
     MetricKey.MIDDLE_SCHOOL: "중학교",
+    MetricKey.RESIDENTIAL_ZONE_RATIO: "주거전용지역 비율",
 }
 
 #: 원시값의 단위. 대부분은 반경 800m 안의 시설 개수지만 셋은 다르다.
@@ -145,8 +162,6 @@ METRIC_UNITS: Mapping[MetricKey, str] = {
     MetricKey.CAFE: "곳",
     MetricKey.PARK: "곳",
     MetricKey.FITNESS: "곳",
-    # 유효 종 수 exp(H). "8종 중 3.13종"처럼 읽는다 — 개수가 아니다.
-    MetricKey.RESTAURANT_VARIETY: "종",
     MetricKey.CHILDCARE_EDUCATION: "곳",
     MetricKey.CHILD_FRIENDLY_VENUE: "곳",
     # 매매 ㎡당 단가. 월세가 아니다 (MLIT 거래가격에는 임대가 없다).
@@ -165,6 +180,7 @@ METRIC_UNITS: Mapping[MetricKey, str] = {
     MetricKey.LARGE_RETAIL: "곳",
     MetricKey.ELEMENTARY_SCHOOL: "곳",
     MetricKey.MIDDLE_SCHOOL: "곳",
+    MetricKey.RESIDENTIAL_ZONE_RATIO: "%",
 }
 
 
@@ -174,7 +190,9 @@ METRIC_UNITS: Mapping[MetricKey, str] = {
 #: 단위만 "%"로 붙였더니 실사용에서 "한국 국적 비율 0.025811%" 가 나갔다 —
 #: 실제 2.58% 를 100배 작게 말한 것이다. 백분위는 단조 변환에 영향받지 않아
 #: 랭킹은 옳았고 서술만 틀렸다. 그래서 인덱스를 다시 굽지 않고 표시에서 옮긴다.
-RATIO_METRICS: frozenset[MetricKey] = frozenset({MetricKey.KOREAN_RESIDENT_RATIO})
+RATIO_METRICS: frozenset[MetricKey] = frozenset(
+    {MetricKey.KOREAN_RESIDENT_RATIO, MetricKey.RESIDENTIAL_ZONE_RATIO}
+)
 
 
 def display_raw_value(key: MetricKey, raw: float | None) -> float | None:

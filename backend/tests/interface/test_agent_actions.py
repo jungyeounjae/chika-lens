@@ -234,7 +234,6 @@ def test_every_metric_detail_carries_its_unit(state: SessionState) -> None:
     for metric, expected in (
         ("price_level", "엔/㎡"),
         ("korean_resident_ratio", "%"),
-        ("restaurant_variety", "종"),
         ("park", "곳"),
     ):
         if metric in units:

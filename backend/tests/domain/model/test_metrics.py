@@ -13,9 +13,10 @@ from chika.domain.model.metrics import (
 
 
 def test_there_are_exactly_23_metrics() -> None:
-    """15는 스펙 §6.2, +4는 disaster_risk 레이어별 진단용 지표, +1은
-    유동인구(daily_ridership, 다이얼 미반영), +3은 다이얼에 반영되는 추가
-    지표(large_retail·elementary_school·middle_school, metrics.py 참조)."""
+    """15개 중 14개(음식점 다양성 제거, metrics.py 참조), +4는 disaster_risk
+    레이어별 진단용 지표, +2는 다이얼 미반영 진단용(daily_ridership·
+    residential_zone_ratio), +3은 다이얼에 반영되는 추가 지표
+    (large_retail·elementary_school·middle_school)."""
     assert len(MetricKey) == 23
 
 
@@ -39,10 +40,13 @@ def test_hazard_layer_metrics_are_excluded_from_dial_scoring() -> None:
 
 
 def test_daily_ridership_has_no_direction() -> None:
-    """유동인구가 많은 게 좋은지 적은 게 좋은지는 사용자 취향에 갈린다 —
-    NEGATIVE_METRICS 에 넣는 것도 임의로 방향을 정하는 것과 같다."""
-    assert DIRECTIONLESS_METRICS == frozenset({MetricKey.DAILY_RIDERSHIP})
+    """유동인구·주거전용지역 비율이 많은/높은 게 좋은지는 사용자 취향에
+    갈린다 — NEGATIVE_METRICS 에 넣는 것도 임의로 방향을 정하는 것과 같다."""
+    assert DIRECTIONLESS_METRICS == frozenset(
+        {MetricKey.DAILY_RIDERSHIP, MetricKey.RESIDENTIAL_ZONE_RATIO}
+    )
     assert MetricKey.DAILY_RIDERSHIP not in NEGATIVE_METRICS
+    assert MetricKey.RESIDENTIAL_ZONE_RATIO not in NEGATIVE_METRICS
 
 
 def test_daily_ridership_is_excluded_from_dial_scoring() -> None:

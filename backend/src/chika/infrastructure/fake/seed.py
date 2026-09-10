@@ -29,7 +29,6 @@ _METRIC_RANGE: dict[MetricKey, tuple[float, float]] = {
     MetricKey.CAFE: (1.0, 90.0),
     MetricKey.PARK: (0.0, 15.0),
     MetricKey.FITNESS: (0.0, 12.0),
-    MetricKey.RESTAURANT_VARIETY: (5.0, 70.0),
     MetricKey.CHILDCARE_EDUCATION: (1.0, 30.0),
     MetricKey.CHILD_FRIENDLY_VENUE: (0.0, 12.0),
     MetricKey.PRICE_LEVEL: (80_000.0, 260_000.0),
@@ -43,6 +42,7 @@ _METRIC_RANGE: dict[MetricKey, tuple[float, float]] = {
     MetricKey.LARGE_RETAIL: (0.0, 5.0),
     MetricKey.ELEMENTARY_SCHOOL: (0.0, 8.0),
     MetricKey.MIDDLE_SCHOOL: (0.0, 5.0),
+    MetricKey.RESIDENTIAL_ZONE_RATIO: (0.0, 1.0),
 }
 
 #: 결측을 일부러 섞는다. 결측 플래그 경로가 시드에서도 살아 있어야 한다.

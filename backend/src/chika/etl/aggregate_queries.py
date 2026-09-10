@@ -48,21 +48,5 @@ CORE_QUERIES: Sequence[AggregateQuery] = (
     AggregateQuery(MetricKey.LARGE_RETAIL, ("shopping_mall", "department_store")),
 )
 
-#: 다양성 지표(10)의 요리 바스켓. 6개월에 한 번만 갱신한다 — 한 동네의 요리
-#: 구성비는 달마다 움직이지 않는다.
-CUISINE_BASKET: Sequence[AggregateQuery] = tuple(
-    AggregateQuery(f"cuisine:{cuisine}", (cuisine,))
-    for cuisine in (
-        "japanese_restaurant",
-        "chinese_restaurant",
-        "italian_restaurant",
-        "indian_restaurant",
-        "thai_restaurant",
-        "fast_food_restaurant",
-        "ramen_restaurant",
-        "sushi_restaurant",
-    )
-)
-
 #: 역 반경. 도보 10분 (스펙 §6.1).
 STATION_RADIUS_M = 800

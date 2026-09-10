@@ -6,13 +6,12 @@
 from __future__ import annotations
 
 import json
-import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from chika.domain.model.metrics import MetricKey, RawMetrics
-from chika.etl.aggregate_queries import CORE_QUERIES, CUISINE_BASKET, AggregateQuery
+from chika.etl.aggregate_queries import CORE_QUERIES, AggregateQuery
 
 #: 무료 한도. 넘으면 실제 돈이 나가므로 기본값으로 막는다.
 FREE_TIER_CALLS = 5000
@@ -33,24 +32,6 @@ def remaining_budget(used_this_month: int) -> int:
 
 class BudgetExceeded(RuntimeError):
     """예산을 넘는 작업을 요청받았다. 콜을 하나도 쓰기 전에 던진다."""
-
-
-def effective_type_count(counts: Sequence[int]) -> float:
-    """섀넌 엔트로피의 유효 종 수 exp(H) — 지표 10.
-
-    '몇 종류가 있나'는 도쿄에서 거의 모든 역이 만점이라 변별이 안 된다(스펙 §6.2.1).
-    한 타입이 압도하면 1에 가깝고, 고르게 분포하면 타입 수에 가까워진다.
-    """
-    total = sum(counts)
-    if total == 0:
-        return 0.0
-    entropy = 0.0
-    for count in counts:
-        if count <= 0:
-            continue
-        share = count / total
-        entropy -= share * math.log(share)
-    return math.exp(entropy)
 
 
 @dataclass(frozen=True)
@@ -141,12 +122,6 @@ def fold_results(
             count = counts.get((station_id, key))
             if count is not None:
                 values[MetricKey(key)] = float(count)
-
-        basket = [counts.get((station_id, q.key)) for q in CUISINE_BASKET]
-        if all(count is not None for count in basket):
-            values[MetricKey.RESTAURANT_VARIETY] = effective_type_count(
-                [int(count) for count in basket if count is not None]
-            )
 
         results.append(RawMetrics(station_id=station_id, values=values))
     return results

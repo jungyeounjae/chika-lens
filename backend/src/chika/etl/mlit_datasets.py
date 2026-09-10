@@ -76,6 +76,16 @@ HAZARD_DATASETS: Sequence[MlitDataset] = (LIQUEFACTION, FLOOD, STORM_SURGE, SEDI
 #: 구간 LineString 이다 (mlit_ridership.py 가 대표점으로 바꾼다).
 RIDERSHIP = MlitDataset("XKT015", "駅別乗降客数", "bs018_passengers_by_station")
 
+#: 지표 24(주거전용지역 비율)의 출처. 用途地域 — 프로브(2026-09-10)로 확인:
+#: `youto_id`(1~12)·`use_area_ja`(한국어 아님, 일본어 명칭)를 준다. 국가
+#: 표준 12분류라 값 도메인이 공식적으로 고정돼 있다.
+ZONING = MlitDataset("XKT002", "用途地域", "bs001_use_area")
+
+#: 住居専用地域(주거전용지역) — 법적으로 상가·공장 건립이 금지된 구역.
+#: 1・2=低層(저층), 3・4=中高層. 5~7(住居地域)은 상업시설이 일부 허용돼
+#: 빼고, 9~12(근린상업・상업・준공업・공업)는 당연히 뺀다.
+QUIET_ZONE_IDS: frozenset[int] = frozenset({1, 2, 3, 4})
+
 #: XKT006 중 육아·교육 지표에 넣을 학교 종별. 고교·대학·전수학교는 뺀다 —
 #: 아이를 키우는 가구가 통학 거리를 따지는 것은 초등·중학이고, 대학은 오히려
 #: 학생 거리(街)의 신호라 다른 지표와 뜻이 겹친다.

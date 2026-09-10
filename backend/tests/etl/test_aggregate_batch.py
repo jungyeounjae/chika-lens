@@ -8,32 +8,11 @@ from chika.etl.aggregate_batch import (
     FREE_TIER_CALLS,
     BudgetExceeded,
     Checkpoint,
-    effective_type_count,
     fold_results,
     pending_work,
     remaining_budget,
 )
-from chika.etl.aggregate_queries import CORE_QUERIES, CUISINE_BASKET, AggregateQuery
-
-# --- 유효 종 수 ---
-
-
-def test_effective_type_count_of_even_distribution_is_the_type_count() -> None:
-    assert effective_type_count([10, 10, 10, 10]) == pytest.approx(4.0)
-
-
-def test_effective_type_count_of_a_monopoly_is_one() -> None:
-    assert effective_type_count([100, 0, 0, 0]) == pytest.approx(1.0)
-
-
-def test_effective_type_count_of_nothing_is_zero() -> None:
-    assert effective_type_count([0, 0, 0]) == 0.0
-
-
-def test_effective_type_count_matches_the_nakano_measurement() -> None:
-    """스펙 §6.2.1의 실측값. 일식 70% 편중이라 8종이 전부 있어도 3.13이다."""
-    assert effective_type_count([455, 41, 39, 9, 6, 24, 59, 20]) == pytest.approx(3.13, abs=0.01)
-
+from chika.etl.aggregate_queries import CORE_QUERIES, AggregateQuery
 
 # --- 체크포인트 ---
 
@@ -124,19 +103,6 @@ def test_fold_leaves_unmeasured_metrics_as_none() -> None:
     assert raws[0].get(MetricKey.KOREAN_RESIDENT_RATIO) is None
 
 
-def test_fold_computes_diversity_from_the_cuisine_basket() -> None:
-    counts: dict[tuple[str, str], int] = {(("st_a"), q.key): 3 for q in CORE_QUERIES}
-    counts.update({("st_a", q.key): 10 for q in CUISINE_BASKET})
-    raws = fold_results(["st_a"], counts)
-    assert raws[0].get(MetricKey.RESTAURANT_VARIETY) == pytest.approx(8.0)
-
-
-def test_fold_leaves_diversity_missing_when_the_basket_was_not_run() -> None:
-    counts = {("st_a", q.key): 3 for q in CORE_QUERIES}
-    raws = fold_results(["st_a"], counts)
-    assert raws[0].get(MetricKey.RESTAURANT_VARIETY) is None
-
-
 def test_fold_leaves_a_metric_missing_when_its_query_never_completed() -> None:
     counts = {("st_a", q.key): 5 for q in CORE_QUERIES if q.key != MetricKey.PARK}
     raws = fold_results(["st_a"], counts)
@@ -171,7 +137,7 @@ def test_query_keys_cover_every_aggregate_metric() -> None:
 
 
 def test_no_duplicate_query_keys() -> None:
-    keys = [q.key for q in (*CORE_QUERIES, *CUISINE_BASKET)]
+    keys = [q.key for q in CORE_QUERIES]
     assert len(keys) == len(set(keys))
 
 

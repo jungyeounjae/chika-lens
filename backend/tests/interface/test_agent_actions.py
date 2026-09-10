@@ -664,6 +664,21 @@ def test_explain_carries_the_criteria_it_was_computed_with() -> None:
     assert "아이 동반 시설" in detail["criteria"]["focus_metrics"]
 
 
+def test_explain_area_gives_every_metric_of_each_active_dial_via_by_dial() -> None:
+    """strengths/weaknesses(상위·하위 3개)에 없어도, 활성 다이얼의 지표는
+    by_dial 에서 전부 확인할 수 있어야 한다 — "육아 환경을 함께 봤다"고
+    말해 놓고 근거를 하나도 못 낸 오답의 재발 방지."""
+    session = _persona_state()
+    act_set_criteria(session, household="family")  # family 다이얼 활성화
+    detail = act_explain_area(session, "a")
+    assert "family" in detail["by_dial"]
+    family_metrics = {m["metric"] for m in detail["by_dial"]["family"]["metrics"]}
+    assert family_metrics == {
+        "childcare_education", "child_friendly_venue",
+        "elementary_school", "middle_school",
+    }
+
+
 def test_a_dial_the_household_zeroes_is_absent_from_the_focus() -> None:
     """1인 가구에서 보육시설은 가중치 0 이라 근거로 들면 안 된다."""
     session = _persona_state()

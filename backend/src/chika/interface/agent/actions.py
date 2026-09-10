@@ -365,6 +365,16 @@ def act_explain_area(state: SessionState, station_id: str) -> dict[str, Any]:
         "criteria": _interpretation(state.criteria),
         "strengths": [detail(item) for item in explanation.strengths],
         "weaknesses": [detail(item) for item in explanation.weaknesses],
+        # 활성 다이얼마다 그 다이얼의 지표 전부. strengths/weaknesses(상위·
+        # 하위 3개)에 없어도 여기서 확인한다 — "육아 환경을 함께 봤다"고
+        # 말했으면 이 안에서 근거를 찾아 답에 넣는다.
+        "by_dial": {
+            dial.value: {
+                "label": DIAL_LABELS_KO[dial],
+                "metrics": [detail(item) for item in items],
+            }
+            for dial, items in explanation.by_dial.items()
+        },
         "missing_metrics": _missing(explanation.missing),
         # 주변 역. 좌표가 로컬에 있어 API 비용이 0이다 —
         # 역이 하나뿐인 동네와 노선이 겹치는 동네의 차이를 지도가 보여준다.

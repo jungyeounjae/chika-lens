@@ -46,6 +46,50 @@ def test_strengths_are_the_top_positive_contributions() -> None:
     assert result.weaknesses[0].key is MetricKey.PARK
 
 
+def test_by_dial_covers_every_metric_of_an_active_dial_even_when_top_n_excludes_it() -> None:
+    """실제로 나온 오답: "육아 환경을 함께 봤다"고 말해 놓고 육아 관련
+    지표가 strengths/weaknesses(전체 지표 중 상위·하위 top_n개)에 하나도
+    없었다 — family 다이얼이 계산 안 된 게 아니라 top_n 밖으로 밀렸을
+    뿐이었다. by_dial 은 top_n 과 무관하게 그 다이얼의 지표 전부를 준다
+    — top_n=0 으로 strengths/weaknesses 를 완전히 비워도 여전히 있다."""
+    usecase = _usecase(
+        [_station("s0"), _station("s1")],
+        [
+            _raw(
+                "s0",
+                childcare_education=15.0, child_friendly_venue=20.0,
+                elementary_school=25.0, middle_school=30.0,
+            ),
+            _raw("s1"),
+        ],
+        {},
+    )
+    criteria = SearchCriteria(dials=DialSettings({Dial.FAMILY: 1.0}))
+    result = usecase.execute("s0", criteria, top_n=0)
+    assert result.strengths == []
+    assert result.weaknesses == []
+    assert Dial.FAMILY in result.by_dial
+    by_dial_keys = {d.key for d in result.by_dial[Dial.FAMILY]}
+    assert by_dial_keys == {
+        MetricKey.CHILDCARE_EDUCATION,
+        MetricKey.CHILD_FRIENDLY_VENUE,
+        MetricKey.ELEMENTARY_SCHOOL,
+        MetricKey.MIDDLE_SCHOOL,
+    }
+    childcare = next(
+        d for d in result.by_dial[Dial.FAMILY] if d.key is MetricKey.CHILDCARE_EDUCATION
+    )
+    assert childcare.raw_value == 15.0
+
+
+def test_by_dial_omits_dials_with_zero_strength() -> None:
+    usecase = _usecase([_station("a"), _station("b")], [_raw("a"), _raw("b")], {})
+    criteria = SearchCriteria(dials=DialSettings({Dial.FAMILY: 1.0}))
+    result = usecase.execute("a", criteria)
+    assert Dial.KOREAN_LIFE not in result.by_dial
+    assert Dial.FAMILY in result.by_dial
+
+
 def test_focus_metric_makes_that_metric_the_only_contributor() -> None:
     """"초등학교 몇개야?" 처럼 지표 하나만 콕 집으면, 다이얼이 전부 0이라
     균등 다이얼로 대체돼 엉뚱한 지표들이 strengths/weaknesses 에 뜨고

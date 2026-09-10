@@ -80,7 +80,14 @@ def rank_areas(ctx: RunContextWrapper[SessionState], limit: int = 5) -> dict[str
 
 @function_tool
 def explain_area(ctx: RunContextWrapper[SessionState], station_id: str) -> dict[str, Any]:
-    """한 역의 점수를 지표별 기여도로 분해한다."""
+    """한 역의 점수를 지표별 기여도로 분해한다.
+
+    `strengths`/`weaknesses`는 전체 지표 중 기여도 상위·하위 3개일 뿐,
+    다른 다이얼에 밀려 활성 다이얼의 지표가 하나도 안 뜰 수 있다 —
+    `by_dial`에 활성 다이얼(강도>0)마다 그 다이얼의 지표 전부가 있으니,
+    "육아는?"처럼 다이얼 하나를 콕 집은 질문엔 새로 조회하지 말고 여기서
+    가져다 쓴다.
+    """
     return actions.act_explain_area(ctx.context, station_id)
 
 

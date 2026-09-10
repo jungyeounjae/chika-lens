@@ -11,9 +11,9 @@ from dataclasses import dataclass
 from chika.domain.model.criteria import SearchCriteria
 from chika.domain.model.metrics import WARD_RESOLUTION_METRICS, AreaMetrics, MetricKey
 from chika.domain.model.station import Station
-from chika.domain.model.weights import Weights
+from chika.domain.model.weights import Dial, Weights
 from chika.domain.repository import AreaMetricsRepository, PriceRepository
-from chika.domain.service.dials import expand_dials
+from chika.domain.service.dials import DIAL_TO_METRICS, expand_dials
 from chika.domain.service.geo import distance_meters
 from chika.domain.service.normalization import normalize
 from chika.domain.service.scoring import score
@@ -51,6 +51,13 @@ class AreaExplanation:
     rent_yen: int | None
     strengths: list[MetricDetail]
     weaknesses: list[MetricDetail]
+    #: 활성 다이얼(강도>0)마다 그 다이얼에 속한 지표 전부. strengths/
+    #: weaknesses는 전체 지표 중 기여도 상위·하위 top_n개뿐이라, 다이얼이
+    #: 여럿 활성화되면 한 다이얼의 지표 전부가 더 극단적인 다른 다이얼에
+    #: 밀려 안 보일 수 있다 — "육아 환경을 함께 봤다"고 말해 놓고 육아
+    #: 지표를 하나도 못 보여주는 사고가 실제로 났다. 이 필드는 그 다이얼을
+    #: 언급한 이상 최소한 근거를 낼 수 있게, 안 보이는 지표까지 전부 준다.
+    by_dial: dict[Dial, list[MetricDetail]]
     missing: list[MetricKey]
     #: 주변 역. 좌표가 이미 로컬에 있어 API 호출이 필요 없다 —
     #: 역이 하나뿐인 동네와 여러 노선이 겹치는 동네의 차이를 지도에서 보여준다.
@@ -94,6 +101,12 @@ class ExplainArea:
                 is_ward_resolution=key in WARD_RESOLUTION_METRICS,
             )
 
+        by_dial = {
+            dial: [detail(key) for key in DIAL_TO_METRICS[dial]]
+            for dial in Dial
+            if criteria.dials.strength(dial) > 0
+        }
+
         return AreaExplanation(
             station=station,
             nearby=_nearby(station, self._areas.stations()),
@@ -101,6 +114,7 @@ class ExplainArea:
             rent_yen=self._prices.median_rents(criteria.household).get(station_id),
             strengths=[detail(key) for key, _ in area_score.top_drivers(top_n)],
             weaknesses=[detail(key) for key, _ in area_score.bottom_drivers(top_n)],
+            by_dial=by_dial,
             missing=sorted(area.missing),
         )
 

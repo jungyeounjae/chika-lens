@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from chika.domain.model.criteria import SearchCriteria
 from chika.domain.model.metrics import WARD_RESOLUTION_METRICS, AreaMetrics, MetricKey
 from chika.domain.model.station import Station
+from chika.domain.model.weights import Weights
 from chika.domain.repository import AreaMetricsRepository, PriceRepository
 from chika.domain.service.dials import expand_dials
 from chika.domain.service.geo import distance_meters
@@ -71,7 +72,17 @@ class ExplainArea:
         raws = self._areas.raw_metrics()
         area = _find_area(normalize(raws), station_id)
         raw = next((r for r in raws if r.station_id == station_id), None)
-        area_score = score(area, expand_dials(criteria.dials))
+        # focus_metric 이 있으면(예: "초등학교 몇개야?") 다이얼 전개를
+        # 건너뛰고 그 지표 하나에만 가중치 1.0을 준다 — rank_areas 와 같은
+        # 이유다. 안 그러면 다이얼이 전부 0이라 균등 다이얼로 대체되고,
+        # strengths/weaknesses(기여도 상위·하위 3개)에 focus_metric 이
+        # 안 뜬 채로 "데이터 없음"이라고 잘못 답하게 된다.
+        weights = (
+            Weights({criteria.focus_metric: 1.0})
+            if criteria.focus_metric is not None
+            else expand_dials(criteria.dials)
+        )
+        area_score = score(area, weights)
 
         def detail(key: MetricKey) -> MetricDetail:
             return MetricDetail(

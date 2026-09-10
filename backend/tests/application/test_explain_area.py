@@ -46,6 +46,25 @@ def test_strengths_are_the_top_positive_contributions() -> None:
     assert result.weaknesses[0].key is MetricKey.PARK
 
 
+def test_focus_metric_makes_that_metric_the_only_contributor() -> None:
+    """"초등학교 몇개야?" 처럼 지표 하나만 콕 집으면, 다이얼이 전부 0이라
+    균등 다이얼로 대체돼 엉뚱한 지표들이 strengths/weaknesses 에 뜨고
+    focus_metric 은 안 보이던 버그의 재현 — rank_areas 와 같은 이유로
+    같은 수정이 필요했다."""
+    usecase = _usecase(
+        [_station("a"), _station("b")],
+        [_raw("a", elementary_school=8.0), _raw("b", elementary_school=0.0)],
+        {},
+    )
+    criteria = SearchCriteria(
+        dials=DialSettings({}),  # 다이얼 없음 — 전부 0
+        focus_metric=MetricKey.ELEMENTARY_SCHOOL,
+    )
+    result = usecase.execute("a", criteria)
+    assert result.strengths[0].key is MetricKey.ELEMENTARY_SCHOOL
+    assert all(d.contribution == 0 for d in result.weaknesses)
+
+
 def test_ward_resolution_flag_is_surfaced() -> None:
     # 역이 하나뿐이면 모든 기여도가 0이라 특정 지표가 상위 3개에 든다는 보장이 없다.
     # 구 단위 지표에 실제 편차를 만들어 strengths에 올라오게 한다.

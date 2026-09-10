@@ -64,6 +64,18 @@ def test_totals_are_returned_for_every_station() -> None:
     assert set(result.totals) == {"a", "c"}
 
 
+def test_focus_metric_makes_the_total_track_that_metric_alone() -> None:
+    """rank_areas·explain_area 와 같은 이유 — focus_metric 이 있으면
+    다이얼이 전부 0이라 균등 다이얼로 대체되던 걸 막는다."""
+    usecase = _usecase(
+        [_station("a"), _station("b")],
+        [_raw("a", cafe=99.0), _raw("b", cafe=1.0)],
+    )
+    criteria = SearchCriteria(dials=DialSettings({}), focus_metric=MetricKey.CAFE)
+    result = usecase.execute(["a", "b"], criteria)
+    assert result.totals["a"] > result.totals["b"]
+
+
 def test_comparing_fewer_than_two_stations_is_rejected() -> None:
     usecase = _usecase([_station("a")], [_raw("a")])
     with pytest.raises(ValueError, match="at least two"):

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from chika.domain.model.criteria import SearchCriteria
 from chika.domain.model.metrics import MetricKey
 from chika.domain.model.station import Station
+from chika.domain.model.weights import Weights
 from chika.domain.repository import AreaMetricsRepository
 from chika.domain.service.dials import expand_dials
 from chika.domain.service.normalization import normalize
@@ -49,7 +50,13 @@ class CompareAreas:
             stations.append(by_id[station_id])
 
         areas = {area.station_id: area for area in normalize(self._areas.raw_metrics())}
-        weights = expand_dials(criteria.dials)
+        # rank_areas·explain_area와 같은 이유 — focus_metric 이 있으면
+        # 종합점수도 그 지표 하나만 반영해야 한다.
+        weights = (
+            Weights({criteria.focus_metric: 1.0})
+            if criteria.focus_metric is not None
+            else expand_dials(criteria.dials)
+        )
 
         totals = {sid: score(areas[sid], weights).total for sid in station_ids}
 

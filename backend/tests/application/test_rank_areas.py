@@ -55,6 +55,37 @@ def test_ranks_by_the_requested_dial() -> None:
     assert result[0].station.id == "kimchi"
 
 
+def test_focus_metric_ignores_dials_and_ranks_by_that_metric_alone() -> None:
+    """"공원이 제일 많은 역은?" 처럼 지표 하나만 콕 집으면, quality_of_life
+    다이얼(카페·공원·피트니스·음식점다양성 균등분배)에 뭉개지면 안 된다."""
+    usecase = _usecase(
+        [_station("park_rich"), _station("cafe_rich")],
+        [
+            _raw("park_rich", park=50.0, cafe=0.0),
+            _raw("cafe_rich", park=0.0, cafe=50.0),
+        ],
+    )
+    criteria = SearchCriteria(
+        dials=DialSettings({Dial.QUALITY_OF_LIFE: 1.0}),
+        focus_metric=MetricKey.PARK,
+    )
+    result = usecase.execute(criteria)
+    assert result[0].station.id == "park_rich"
+
+
+def test_focus_metric_matches_the_percentile_exactly() -> None:
+    """가중치가 지표 하나에 100% 쏠리면 score = percentile 이라, 결과
+    순서가 metric_extremes(direction="best")와 정확히 같아야 한다 —
+    에이전트가 실수로 rank_areas 를 불러도 답이 틀리지 않는 이유다."""
+    usecase = _usecase(
+        [_station("a"), _station("b"), _station("c")],
+        [_raw("a", park=10.0), _raw("b", park=30.0), _raw("c", park=20.0)],
+    )
+    criteria = SearchCriteria(dials=DialSettings.balanced(), focus_metric=MetricKey.PARK)
+    result = usecase.execute(criteria)
+    assert [r.station.id for r in result] == ["b", "c", "a"]
+
+
 def test_limit_caps_the_result_size() -> None:
     stations, raws, commute, prices = build_seed(count=40)
     result = _usecase(stations, raws, commute, prices).execute(

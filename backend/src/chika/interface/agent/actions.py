@@ -24,7 +24,7 @@ from chika.domain.model.metrics import (
     display_raw_value,
 )
 from chika.domain.model.station import Station
-from chika.domain.model.weights import DIAL_LABELS_KO, Dial, DialSettings
+from chika.domain.model.weights import DIAL_LABELS_KO, Dial, DialSettings, Weights
 from chika.domain.service.dials import DIAL_TO_METRICS, expand_dials
 from chika.domain.service.personas import seed_dials
 from chika.interface.agent.state import SessionState
@@ -69,6 +69,13 @@ def _interpretation(criteria: SearchCriteria) -> dict[str, Any]:
                 for key in DIAL_TO_METRICS[dial]
             }
         ),
+        # 지표 하나만 콕 집었을 때만 채워진다 — 이게 있으면 위 active_dials/
+        # focus_metrics 는 무시되고 이 지표 하나에만 가중치 100%가 간다.
+        "focus_metric": (
+            METRIC_LABELS_KO[criteria.focus_metric]
+            if criteria.focus_metric is not None
+            else None
+        ),
     }
 
 
@@ -102,6 +109,7 @@ def act_set_criteria(
     budget_max_yen: int | None = None,
     household: str | None = None,
     exclude_wards: Sequence[str] | None = None,
+    focus_metric: str | None = None,
 ) -> dict[str, Any]:
     """대화에서 모은 조건을 세션에 확정한다.
 
@@ -110,6 +118,12 @@ def act_set_criteria(
     전부 필수로 받으면 두 번째 턴이 첫 턴을 통째로 덮어쓴다. 실사용에서
     "한식당 많은 곳" 다음에 "통근지는 없어요"라고 답하자 한국 생활 강조가
     사라지고 전혀 다른 랭킹이 나왔다 — LLM은 그 턴에서 언급된 것만 넘기기 때문이다.
+
+    **`focus_metric` 은 예외다 — 생략하면 이전 값을 유지하지 않고 `None`
+    으로 돌아간다.** 다른 필드는 "누적되는 배경 조건"이지만 이건 "이번
+    질문이 지표 하나만 콕 집은 것인가"라는 매 순간의 판단이다. 이전 턴에
+    `park` 를 콕 집었다고 다음 턴에도 계속 `park` 만 보면, 사용자가 새로
+    다른 조건을 물어도 계속 공원 하나로만 랭킹이 좁혀진다.
     """
     previous = state.criteria
 
@@ -122,6 +136,17 @@ def act_set_criteria(
             raise ValueError(
                 f"unknown household: {household!r} (single/couple/family 중 하나)"
             ) from exc
+
+    focus_metric_key: MetricKey | None = None
+    if focus_metric is not None:
+        try:
+            focus_metric_key = MetricKey(focus_metric)
+        except ValueError:
+            return {
+                "error": "unknown_metric",
+                "metric": focus_metric,
+                "known_metrics": sorted(k.value for k in MetricKey),
+            }
 
     resolved_commute_to = previous.commute_to if previous else None
     if commute_to is not None:
@@ -171,11 +196,16 @@ def act_set_criteria(
             if exclude_wards is not None
             else (previous.exclude_wards if previous else ())
         ),
+        focus_metric=focus_metric_key,
     )
     state.criteria = criteria
     state.last_ranking = []
 
-    weights = expand_dials(dials)
+    weights = (
+        Weights({focus_metric_key: 1.0})
+        if focus_metric_key is not None
+        else expand_dials(dials)
+    )
     return {
         "ok": True,
         "weights": {key.value: round(value, 4) for key, value in weights.items()},

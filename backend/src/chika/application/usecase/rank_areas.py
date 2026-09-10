@@ -9,6 +9,7 @@ from chika.domain.model.criteria import SearchCriteria
 from chika.domain.model.metrics import MetricKey
 from chika.domain.model.score import AreaScore
 from chika.domain.model.station import Station
+from chika.domain.model.weights import Weights
 from chika.domain.repository import (
     AreaMetricsRepository,
     CommuteRepository,
@@ -48,7 +49,18 @@ class RankAreas:
         # 퍼센타일은 필터 이전, 전체 모집단 기준으로 계산한다 (스펙 §6.3).
         normalized = normalize(self._areas.raw_metrics())
         percentiles_by_id = {area.station_id: area.percentile for area in normalized}
-        scores = rank(normalized, expand_dials(criteria.dials))
+        # focus_metric 이 있으면 다이얼 전개를 건너뛰고 그 지표 하나에만
+        # 가중치 1.0을 준다 — "공원"이 quality_of_life 다이얼(카페·공원·
+        # 피트니스·음식점다양성 균등분배)에 뭉개지는 걸 막는다. 가중치가
+        # 지표 하나에 100% 쏠리면 score = percentile 그대로라, 정렬 순서가
+        # metric_extremes(direction="best")와 정확히 같아진다 — 에이전트가
+        # 실수로 rank_areas 를 불러도 답은 틀리지 않는다.
+        weights = (
+            Weights({criteria.focus_metric: 1.0})
+            if criteria.focus_metric is not None
+            else expand_dials(criteria.dials)
+        )
+        scores = rank(normalized, weights)
 
         # 리포지토리 조회는 루프 밖에서 한 번씩만 한다. 역마다 조회하면
         # 실제 어댑터에서 역 수만큼 라운드트립이 된다.

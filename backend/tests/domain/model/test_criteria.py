@@ -1,6 +1,7 @@
 import pytest
 
 from chika.domain.model.criteria import Household, SearchCriteria
+from chika.domain.model.metrics import MetricKey
 from chika.domain.model.weights import Dial, DialSettings
 
 
@@ -17,6 +18,17 @@ def test_defaults_are_unconstrained_single_household() -> None:
     assert criteria.budget_yen is None
     assert criteria.household is Household.SINGLE
     assert criteria.exclude_wards == ()
+    assert criteria.focus_metric is None
+
+
+def test_focus_metric_accepts_a_real_metric_key() -> None:
+    criteria = _criteria(focus_metric=MetricKey.PARK)
+    assert criteria.focus_metric is MetricKey.PARK
+
+
+def test_focus_metric_rejects_a_non_metric_key_value() -> None:
+    with pytest.raises(ValueError, match="unknown metric"):
+        _criteria(focus_metric="not_a_metric")
 
 
 def test_replace_changes_only_the_named_field() -> None:

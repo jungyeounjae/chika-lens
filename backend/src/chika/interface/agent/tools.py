@@ -24,11 +24,22 @@ def set_criteria(
     budget_max_yen: int | None = None,
     household: str | None = None,
     exclude_wards: list[str] | None = None,
+    focus_metric: str | None = None,
 ) -> dict[str, Any]:
     """사용자 조건을 확정한다. 다이얼 5개는 0~5의 상대 강도다.
 
     commute_to는 반드시 실제 역 이름(한국어/일본어) 또는 id여야 한다.
     unknown_commute_station 오류가 오면 후보를 사용자에게 되물어야 한다.
+
+    **사용자가 지표 하나만 콕 집어 물었으면(예: "공원이 제일 많은 역은?",
+    "카페 밀집도 높은 곳은?") `focus_metric`에 그 MetricKey 내부 키
+    (예: `park`, `cafe`)를 넣습니다.** 다이얼(예: quality_of_life)로는
+    안 됩니다 — 다이얼은 카페·공원·피트니스·음식점다양성을 한꺼번에
+    묶어서, "공원만"이라는 뜻이 사라집니다. `focus_metric`을 채우면
+    이 지표 하나에만 집중해서 순위가 계산됩니다. 예산·가구 형태 등
+    다른 조건과 같이 물었으면 채우지 마세요 — 다이얼 기반 종합 랭킹이
+    맞습니다. 이 필드는 매번 다시 판단합니다 — 생략하면 이전 값이
+    유지되지 않고 꺼집니다(다른 필드와 다릅니다).
     """
     return actions.act_set_criteria(
         ctx.context,
@@ -43,6 +54,7 @@ def set_criteria(
         budget_max_yen=budget_max_yen,
         household=household,
         exclude_wards=exclude_wards or (),
+        focus_metric=focus_metric,
     )
 
 
@@ -54,7 +66,15 @@ def lookup_station(ctx: RunContextWrapper[SessionState], name: str) -> dict[str,
 
 @function_tool
 def rank_areas(ctx: RunContextWrapper[SessionState], limit: int = 5) -> dict[str, Any]:
-    """확정된 조건으로 역세권을 점수화해 상위 N곳을 반환한다."""
+    """확정된 조건으로 역세권을 점수화해 상위 N곳을 반환한다.
+
+    지표 하나만 콕 집은 질문이면 set_criteria 의 focus_metric 을 채운 뒤
+    이 툴을 부르거나, 아예 metric_extremes(direction="best")를 씁니다.
+    focus_metric 이 채워져 있으면 이 툴도 그 지표 하나만으로 정렬하므로
+    (다이얼 전개를 건너뜀) 결과는 metric_extremes 와 같습니다 — 다만
+    metric_extremes 는 세션에 남은 예산·통근 조건을 무시하고 항상 489역
+    전체를 보는 반면, 이 툴은 그 필터가 그대로 적용됩니다.
+    """
     return actions.act_rank_areas(ctx.context, limit=limit)
 
 

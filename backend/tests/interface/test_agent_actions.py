@@ -145,6 +145,30 @@ def test_set_criteria_can_be_called_again_to_revise(state: SessionState) -> None
     assert state.criteria.budget_yen == (0, 120_000)
 
 
+def test_set_criteria_accepts_a_focus_metric(state: SessionState) -> None:
+    """"공원이 제일 많은 역은?" 처럼 지표 하나만 콕 집었을 때 쓴다."""
+    result = act_set_criteria(state, focus_metric="park")
+    assert state.criteria is not None
+    assert state.criteria.focus_metric is MetricKey.PARK
+    # 가중치가 park 하나에 100% 쏠린다 — quality_of_life 다이얼 균등분배가 아니다.
+    assert result["weights"] == {"park": 1.0}
+    assert result["interpretation"]["focus_metric"] == "공원"
+
+
+def test_set_criteria_rejects_an_unknown_focus_metric(state: SessionState) -> None:
+    result = act_set_criteria(state, focus_metric="not_a_metric")
+    assert result["error"] == "unknown_metric"
+
+
+def test_focus_metric_does_not_persist_across_turns(state: SessionState) -> None:
+    """다른 필드(다이얼·예산 등)와 달리, 생략하면 이전 값이 아니라 None 으로
+    돌아간다 — 이전 질문이 "공원만"이었다고 다음 질문까지 공원에 갇히면 안 된다."""
+    act_set_criteria(state, focus_metric="park")
+    act_set_criteria(state, korean_life=3.0)
+    assert state.criteria is not None
+    assert state.criteria.focus_metric is None
+
+
 def test_rank_before_set_criteria_is_refused(state: SessionState) -> None:
     result = act_rank_areas(state)
     assert result["error"] == "criteria_not_set"

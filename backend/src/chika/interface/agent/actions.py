@@ -9,6 +9,7 @@ from collections.abc import Iterable, Sequence
 from typing import Any
 
 from chika.application.usecase.explain_area import MetricDetail
+from chika.application.usecase.new_construction_search import NewConstructionFilter
 from chika.application.usecase.rank_areas import RankedArea
 from chika.application.usecase.ward_price import WardPrice
 from chika.domain.model.criteria import (
@@ -22,6 +23,11 @@ from chika.domain.model.metrics import (
     WARD_RESOLUTION_METRICS,
     MetricKey,
     display_raw_value,
+)
+from chika.domain.model.new_construction import (
+    HazardLevel,
+    NewConstructionListing,
+    NewConstructionQuietness,
 )
 from chika.domain.model.station import Station
 from chika.domain.model.weights import DIAL_LABELS_KO, Dial, DialSettings, Weights
@@ -682,3 +688,80 @@ def act_zoning_massing(
             for p in polygons
         ],
     }
+
+
+#: 한 번에 LLM에 넘기는 신축 물건 상한 — rank_areas의 MAX_RANKING_LIMIT과 같은 이유.
+MAX_NEW_CONSTRUCTION_LIMIT = 10
+
+
+def _hazard_summary_payload(hazard_summary: dict[str, HazardLevel]) -> dict[str, dict[str, Any]]:
+    return {
+        layer: {"severity": round(level.severity, 3), "label": level.label}
+        for layer, level in hazard_summary.items()
+    }
+
+
+def _quietness_payload(quietness: NewConstructionQuietness | None) -> dict[str, Any] | None:
+    if quietness is None:
+        return None
+    return {
+        "station_id": quietness.station_id,
+        "station_name": quietness.station_name,
+        "distance_m": round(quietness.distance_m, 1),
+        "daily_ridership": quietness.daily_ridership,
+    }
+
+
+def _new_construction_payload(listing: NewConstructionListing) -> dict[str, Any]:
+    return {
+        "suumo_id": listing.suumo_id,
+        "name": listing.name,
+        "ward": listing.ward,
+        "address": listing.address_raw,
+        "lat": listing.lat,
+        "lon": listing.lon,
+        "price_min_yen": listing.price_min_yen,
+        "price_max_yen": listing.price_max_yen,
+        "floor_area_min_sqm": listing.floor_area_min_sqm,
+        "floor_area_max_sqm": listing.floor_area_max_sqm,
+        "delivery_period": listing.delivery_period_raw,
+        "url": listing.url,
+        "fetched_at": listing.fetched_at,
+        "hazard_summary": _hazard_summary_payload(listing.hazard_summary),
+        "quietness": _quietness_payload(listing.quietness),
+    }
+
+
+def act_search_new_construction(
+    state: SessionState,
+    ward: str | None = None,
+    max_price_yen: int | None = None,
+    min_price_yen: int | None = None,
+    max_hazard_severity: float | None = None,
+    min_daily_ridership: float | None = None,
+    max_daily_ridership: float | None = None,
+    limit: int = 10,
+) -> dict[str, Any]:
+    capped = max(1, min(limit, MAX_NEW_CONSTRUCTION_LIMIT))
+    filter_ = NewConstructionFilter(
+        ward=ward,
+        max_price_yen=max_price_yen,
+        min_price_yen=min_price_yen,
+        max_hazard_severity=max_hazard_severity,
+        min_daily_ridership=min_daily_ridership,
+        max_daily_ridership=max_daily_ridership,
+    )
+    listings = state.usecases.new_construction.execute(filter_, limit=capped)
+    state.last_new_construction = listings
+    return {"listings": [_new_construction_payload(listing) for listing in listings]}
+
+
+def act_explain_new_construction(state: SessionState, suumo_id: str) -> dict[str, Any]:
+    listing = next(
+        (item for item in state.last_new_construction if item.suumo_id == suumo_id), None
+    )
+    if listing is None:
+        listing = state.usecases.new_construction.find_by_id(suumo_id)
+    if listing is None:
+        return {"error": "unknown_listing", "suumo_id": suumo_id}
+    return _new_construction_payload(listing)

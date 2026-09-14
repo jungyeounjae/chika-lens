@@ -16,6 +16,7 @@ from chika.application.usecase.explain_area import ExplainArea
 from chika.application.usecase.hazard_polygons import HazardPolygons
 from chika.application.usecase.metric_distribution import MetricDistribution
 from chika.application.usecase.metric_extremes import MetricExtremes
+from chika.application.usecase.new_construction_search import NewConstructionSearch
 from chika.application.usecase.rank_areas import RankAreas
 from chika.application.usecase.ward_price import WardPriceRanking
 from chika.application.usecase.zoning_massing import ZoningMassing
@@ -27,6 +28,7 @@ from chika.infrastructure.fake.repositories import (
 )
 from chika.infrastructure.fake.seed import build_seed
 from chika.infrastructure.file_metrics import FileAreaMetricsRepository
+from chika.infrastructure.file_new_construction import FileNewConstructionRepository
 from chika.infrastructure.mlit_hazard_source import MlitHazardPolygonSource
 from chika.infrastructure.mlit_zoning_source import MlitZoningPolygonSource
 from chika.interface.agent.actions import act_explain_area, act_rank_areas, act_set_criteria
@@ -39,7 +41,10 @@ def _mlit_client() -> MlitClient:
     return MlitClient(os.environ.get("MLIT_API_KEY", ""))
 
 
-def build_demo_session(count: int = 40) -> SessionState:
+def build_demo_session(
+    count: int = 40,
+    new_construction_path: Path = Path("data/new_construction_enriched.json"),
+) -> SessionState:
     stations, raws, commute, prices = build_seed(count=count)
     areas = FakeAreaMetricsRepository(stations, raws)
     client = _mlit_client()
@@ -53,6 +58,9 @@ def build_demo_session(count: int = 40) -> SessionState:
             extremes=MetricExtremes(areas),
             hazard_polygons=HazardPolygons(areas, MlitHazardPolygonSource(client)),
             zoning_massing=ZoningMassing(areas, MlitZoningPolygonSource(client)),
+            new_construction=NewConstructionSearch(
+                FileNewConstructionRepository(new_construction_path)
+            ),
         )
     )
 
@@ -67,6 +75,7 @@ def build_real_session(
     hazards_path: Path = Path("data/mlit_hazards.json"),
     ridership_path: Path = Path("data/mlit_ridership.json"),
     zoning_path: Path = Path("data/mlit_zoning.json"),
+    new_construction_path: Path = Path("data/new_construction_enriched.json"),
 ) -> SessionState:
     """배치들이 만든 실제 인덱스로 세션을 구성한다.
 
@@ -107,6 +116,9 @@ def build_real_session(
             extremes=MetricExtremes(areas),
             hazard_polygons=HazardPolygons(areas, MlitHazardPolygonSource(client)),
             zoning_massing=ZoningMassing(areas, MlitZoningPolygonSource(client)),
+            new_construction=NewConstructionSearch(
+                FileNewConstructionRepository(new_construction_path)
+            ),
         )
     )
 

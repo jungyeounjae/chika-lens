@@ -5,11 +5,13 @@ from chika.application.usecase.explain_area import ExplainArea
 from chika.application.usecase.hazard_polygons import HazardPolygons
 from chika.application.usecase.metric_distribution import MetricDistribution
 from chika.application.usecase.metric_extremes import MetricExtremes
+from chika.application.usecase.new_construction_search import NewConstructionSearch
 from chika.application.usecase.rank_areas import RankAreas
 from chika.application.usecase.ward_price import WardPriceRanking
 from chika.application.usecase.zoning_massing import ZoningMassing
 from chika.domain.model.criteria import Household
 from chika.domain.model.metrics import MetricKey, RawMetrics
+from chika.domain.model.new_construction import NewConstructionListing
 from chika.domain.model.polygon import HazardPolygon, ZoningPolygon
 from chika.domain.model.station import Station
 from chika.domain.model.weights import Dial
@@ -23,11 +25,13 @@ from chika.infrastructure.fake.seed import build_seed
 from chika.interface.agent.actions import (
     act_compare_areas,
     act_explain_area,
+    act_explain_new_construction,
     act_hazard_polygons,
     act_lookup_station,
     act_metric_distribution,
     act_metric_extremes,
     act_rank_areas,
+    act_search_new_construction,
     act_set_criteria,
     act_ward_price_ranking,
     act_zoning_massing,
@@ -51,6 +55,14 @@ class _FakeZoningPolygonSource:
         self, lat: float, lon: float, radius_m: float
     ) -> list[ZoningPolygon]:
         return []
+
+
+class _FakeNewConstructionRepo:
+    def __init__(self, listings: list[NewConstructionListing]) -> None:
+        self._listings = listings
+
+    def listings(self) -> list[NewConstructionListing]:
+        return self._listings
 
 
 class _FakeHazardPolygonSourceWith:
@@ -115,6 +127,7 @@ def _deterministic_state(
             extremes=MetricExtremes(areas),
             hazard_polygons=HazardPolygons(areas, _FakeHazardPolygonSource()),
             zoning_massing=ZoningMassing(areas, _FakeZoningPolygonSource()),
+            new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
         )
     )
 
@@ -133,6 +146,7 @@ def state() -> SessionState:
             extremes=MetricExtremes(areas),
             hazard_polygons=HazardPolygons(areas, _FakeHazardPolygonSource()),
             zoning_massing=ZoningMassing(areas, _FakeZoningPolygonSource()),
+            new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
         )
     )
 
@@ -1017,6 +1031,7 @@ def _state_with_sources(hazard_source, zoning_source) -> SessionState:  # noqa: 
             extremes=MetricExtremes(areas),
             hazard_polygons=HazardPolygons(areas, hazard_source),
             zoning_massing=ZoningMassing(areas, zoning_source),
+            new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
         )
     )
 
@@ -1075,3 +1090,85 @@ def test_zoning_massing_rejects_an_unknown_station() -> None:
     session = _state_with_sources(_FakeHazardPolygonSource(), _FakeZoningPolygonSource())
     result = act_zoning_massing(session, "not_a_station")
     assert result["error"] == "unknown_station"
+
+
+# --- search_new_construction / explain_new_construction ---
+
+
+def _new_construction_listing(suumo_id: str, ward: str = "新宿区") -> NewConstructionListing:
+    from chika.domain.model.new_construction import HazardLevel, NewConstructionQuietness
+
+    return NewConstructionListing(
+        suumo_id=suumo_id,
+        name=f"物件{suumo_id}",
+        ward=ward,
+        address_raw="新宿区下落合１",
+        lat=35.71574,
+        lon=139.699585,
+        price_min_yen=98_900_000,
+        price_max_yen=172_900_000,
+        floor_area_min_sqm=55.08,
+        floor_area_max_sqm=76.56,
+        delivery_period_raw="2027年4月下旬予定",
+        url="https://suumo.jp/x",
+        fetched_at="2026-09-14",
+        hazard_summary={"flood": HazardLevel(severity=0.5, label="0.5m~3.0m")},
+        quietness=NewConstructionQuietness(
+            station_id="st_x", station_name="下落合", distance_m=387.8, daily_ridership=11361.0
+        ),
+    )
+
+
+def _state_with_new_construction(listings: list[NewConstructionListing]) -> SessionState:
+    stations = [_station("a")]
+    areas = FakeAreaMetricsRepository(stations, [_raw("a")])
+    return SessionState(
+        usecases=UseCases(
+            rank=RankAreas(areas, FakeCommuteRepository({}), FakePriceRepository({})),
+            explain=ExplainArea(areas, FakePriceRepository({})),
+            compare=CompareAreas(areas),
+            distribution=MetricDistribution(areas),
+            ward_price=WardPriceRanking(areas),
+            extremes=MetricExtremes(areas),
+            hazard_polygons=HazardPolygons(areas, _FakeHazardPolygonSource()),
+            zoning_massing=ZoningMassing(areas, _FakeZoningPolygonSource()),
+            new_construction=NewConstructionSearch(_FakeNewConstructionRepo(listings)),
+        )
+    )
+
+
+def test_search_new_construction_returns_listings_and_stores_them_in_session() -> None:
+    session = _state_with_new_construction([_new_construction_listing("1")])
+
+    result = act_search_new_construction(session, ward="新宿区")
+
+    assert len(result["listings"]) == 1
+    assert result["listings"][0]["suumo_id"] == "1"
+    assert result["listings"][0]["hazard_summary"]["flood"]["label"] == "0.5m~3.0m"
+    assert session.last_new_construction[0].suumo_id == "1"
+
+
+def test_explain_new_construction_finds_a_listing_from_the_last_search() -> None:
+    session = _state_with_new_construction([_new_construction_listing("1")])
+    act_search_new_construction(session, ward="新宿区")
+
+    result = act_explain_new_construction(session, "1")
+
+    assert result["suumo_id"] == "1"
+    assert result["quietness"]["station_name"] == "下落合"
+
+
+def test_explain_new_construction_falls_back_to_the_repository_without_a_prior_search() -> None:
+    session = _state_with_new_construction([_new_construction_listing("1")])
+
+    result = act_explain_new_construction(session, "1")
+
+    assert result["suumo_id"] == "1"
+
+
+def test_explain_new_construction_reports_unknown_id() -> None:
+    session = _state_with_new_construction([])
+
+    result = act_explain_new_construction(session, "does-not-exist")
+
+    assert result == {"error": "unknown_listing", "suumo_id": "does-not-exist"}

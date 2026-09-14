@@ -170,3 +170,55 @@ def zoning_massing(
     "이 역 주변 건물 밀도/저층·상업지역을 3D로 보여줘"처럼 물을 때 쓴다.
     """
     return actions.act_zoning_massing(ctx.context, station_id, radius_m=radius_m)
+
+
+@function_tool
+def search_new_construction(
+    ctx: RunContextWrapper[SessionState],
+    ward: str | None = None,
+    max_price_yen: int | None = None,
+    min_price_yen: int | None = None,
+    max_hazard_severity: float | None = None,
+    min_daily_ridership: float | None = None,
+    max_daily_ridership: float | None = None,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """SUUMO에서 수집한 도쿄 23구 **신축 분양** 물건을 검색한다.
+
+    `rank_areas`(역세권 랭킹, 489역 기존 데이터)와는 완전히 다른 데이터다 —
+    "신축", "분양", "모델하우스" 관련 질문에 이 툴을 쓴다. `set_criteria`로
+    조건을 확정할 필요 없이 바로 호출 가능하다.
+
+    `ward`는 반드시 일본어 구 이름(예: "新宿区", "미나토구"가 아니다).
+    `max_hazard_severity`(0~1, 낮을수록 안전)를 주면 그 값을 넘는 재해
+    레이어가 하나라도 있는 물건을 제외한다 — "안전한 곳만"이면 0.5 정도를
+    시작값으로 쓴다. `min_daily_ridership`/`max_daily_ridership`는 최근접
+    역의 일평균 승하차인원(정숙도 프록시, 많을수록 번화가)으로 거른다 —
+    "조용한 동네"면 max_daily_ridership를, "번화가"면 min_daily_ridership를
+    쓴다. 가격은 전부 엔 단위(1억엔 = 100000000)다.
+
+    결과는 세션에 저장되어, 이후 `explain_new_construction`으로 물건 하나를
+    더 자세히 볼 수 있다. `hazard_summary`에 레이어가 없으면 "그 레이어
+    데이터 없음"이지 "안전"이 아니다 — 답할 때 구분해서 말한다.
+    """
+    return actions.act_search_new_construction(
+        ctx.context,
+        ward=ward,
+        max_price_yen=max_price_yen,
+        min_price_yen=min_price_yen,
+        max_hazard_severity=max_hazard_severity,
+        min_daily_ridership=min_daily_ridership,
+        max_daily_ridership=max_daily_ridership,
+        limit=limit,
+    )
+
+
+@function_tool
+def explain_new_construction(
+    ctx: RunContextWrapper[SessionState], suumo_id: str
+) -> dict[str, Any]:
+    """신축 물건 하나의 전체 정보(가격·면적·인도시기·재해 요약·정숙도)를 낸다.
+
+    `suumo_id`는 `search_new_construction` 결과에 있는 값을 그대로 쓴다.
+    """
+    return actions.act_explain_new_construction(ctx.context, suumo_id)

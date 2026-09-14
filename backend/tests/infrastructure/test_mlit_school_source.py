@@ -110,14 +110,14 @@ def test_duplicate_features_across_tiles_are_deduplicated_by_id() -> None:
 
 
 def test_preschools_and_schools_are_combined_and_sorted_by_distance() -> None:
-    close = _preschool_feature("p1", "가까운유치원", lat=NEAR_LAT, lon=NEAR_LON)
-    far_but_in_radius = _school_feature(
-        "s1", "먼학교", lat=QUERY_LAT + 0.003, lon=QUERY_LON + 0.003
+    far = _preschool_feature("p1", "먼유치원", lat=QUERY_LAT + 0.003, lon=QUERY_LON + 0.003)
+    close_but_in_radius = _school_feature(
+        "s1", "가까운학교", lat=NEAR_LAT, lon=NEAR_LON
     )
-    client = _client_returning({"XKT007": [close], "XKT006": [far_but_in_radius]})
+    client = _client_returning({"XKT007": [far], "XKT006": [close_but_in_radius]})
     source = MlitSchoolFacilitySource(client)
 
     facilities = source.facilities_near(QUERY_LAT, QUERY_LON, radius_m=800.0)
 
-    assert [f.name for f in facilities] == ["가까운유치원", "먼학교"]
+    assert [f.name for f in facilities] == ["가까운학교", "먼유치원"]
     assert facilities[0].distance_m < facilities[1].distance_m

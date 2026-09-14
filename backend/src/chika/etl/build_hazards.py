@@ -1,7 +1,7 @@
-"""지표 14(재해위험) + 16~19(레이어별 진단용) 인덱스 배치 —
-MLIT 액상화·홍수·해일·토사재해 4개 레이어.
+"""지표 14(재해위험) + 16~19·25(레이어별 진단용) 인덱스 배치 —
+MLIT 액상화·홍수·해일·토사재해·쓰나미 5개 레이어.
 
-호출 과금이 없다. 4개 데이터셋을 역세권 좌표를 덮는 타일로 받아
+호출 과금이 없다. 5개 데이터셋을 역세권 좌표를 덮는 타일로 받아
 `HazardIndex`(mlit_hazards.py)에 합치고, 역마다 반경 안 최댓값 위험도를 낸다.
 레이어마다 4개 통합본과 별개로 자기 것만 담은 `HazardIndex`도 또 만든다 —
 "홍수만", "액상화만"처럼 레이어 하나만 물어보는 질문에 재해위험과 겹치지
@@ -9,7 +9,10 @@ MLIT 액상화·홍수·해일·토사재해 4개 레이어.
 
 FLOOD(XKT026)만 z=15 를 요구해 타일 수가 다른 3개보다 훨씬 많다 — z=13 대비
 한 변이 4배로 쪼개져 타일 개수가 16배가 된다. 데이터셋마다 캐시 파일을
-따로 둔다 (스펙 §3.1.2 — 원본은 `data/.cache/`에만, 커밋하지 않는다).
+따로 둔다. 지금은 `data/.cache/`에만 두고 커밋하지 않는데, 이건 MLIT
+라이선스가 막아서가 아니다 — 실제 PDL1.0은 출처 표기 조건으로 재배포를
+허용한다(스펙 §3.1.2 정정, 2026-09-11). `stations.json`처럼 커밋 대상으로
+옮길지는 별도 결정 사항이다.
 
 z=15 는 실측으로 타일당 6초 안팎이 걸렸다 — 레이트리밋(0.2초)이 아니라
 응답 자체가 느리다. 766타일 전부 받으면 2시간을 넘긴다. `--max-tiles` 로
@@ -42,6 +45,7 @@ from chika.etl.mlit_datasets import (
     LIQUEFACTION,
     SEDIMENT_HAZARD,
     STORM_SURGE,
+    TSUNAMI,
     MlitDataset,
 )
 from chika.etl.mlit_hazards import DECAY_M, HazardIndex, HazardZone, parse_all
@@ -62,6 +66,7 @@ _LAYERS: tuple[tuple[MlitDataset, str, str, MetricKey], ...] = (
         MetricKey.STORM_SURGE_RISK,
     ),
     (SEDIMENT_HAZARD, "sediment", "mlit_hazard_sediment_raw.json", MetricKey.SEDIMENT_RISK),
+    (TSUNAMI, "tsunami", "mlit_hazard_tsunami_raw.json", MetricKey.TSUNAMI_RISK),
 )
 
 
@@ -101,7 +106,7 @@ def main() -> None:
         )
 
     if not zones:
-        sys.exit("4개 레이어 전부 0건이다. 타일 범위나 엔드포인트가 어긋났을 수 있다.")
+        sys.exit("5개 레이어 전부 0건이다. 타일 범위나 엔드포인트가 어긋났을 수 있다.")
 
     index_tree = HazardIndex(zones)
     layer_trees = {metric: HazardIndex(z) for metric, z in layer_zones.items()}

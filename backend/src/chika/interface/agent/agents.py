@@ -13,12 +13,14 @@ from chika.interface.agent.state import SessionState
 from chika.interface.agent.tools import (
     compare_areas,
     explain_area,
+    hazard_polygons,
     lookup_station,
     metric_distribution,
     metric_extremes,
     rank_areas,
     set_criteria,
     ward_price_ranking,
+    zoning_massing,
 )
 
 
@@ -35,6 +37,8 @@ def build_agents() -> Agent[SessionState]:
             metric_distribution,
             ward_price_ranking,
             metric_extremes,
+            hazard_polygons,
+            zoning_massing,
         ],
     )
     intake: Agent[SessionState] = Agent(

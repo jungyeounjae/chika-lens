@@ -17,6 +17,7 @@ from chika.etl.mlit_hazards import (
     parse_hazard,
     sediment_severity,
     storm_surge_severity,
+    tsunami_severity,
 )
 
 #: 한 변이 약 200m인 정사각형. 도쿄 위도에서 대략적인 크기면 충분하다 —
@@ -102,6 +103,28 @@ def test_sediment_designation_stage_does_not_change_severity() -> None:
 def test_an_unknown_sediment_degree_code_is_loud() -> None:
     with pytest.raises(HazardShapeError):
         sediment_severity(5)
+
+
+def test_tsunami_bands_are_ordered_by_depth() -> None:
+    """도도부현마다 구간 문자열이 달라(神奈川 7단계 vs 千葉 6단계, 실측
+    2026-09-10) 화이트리스트 대신 "X以上"의 X(m)를 직접 읽는다."""
+    assert (
+        tsunami_severity("0.01m以上 ～ 0.3m未満")
+        < tsunami_severity("1m以上 ～ 2m未満")
+        < tsunami_severity("10.0m以上 20.0m未満")
+    )
+
+
+def test_tsunami_band_tilde_formatting_does_not_matter() -> None:
+    """神奈川("～" 포함)과 千葉(공백만) 두 형식이 같은 하한이면 같은 심각도다."""
+    kanagawa = tsunami_severity("1m以上 ～ 2m未満")
+    chiba = tsunami_severity("1.0m以上 3.0m未満")
+    assert kanagawa == pytest.approx(chiba)
+
+
+def test_an_unparseable_tsunami_band_is_loud() -> None:
+    with pytest.raises(HazardShapeError):
+        tsunami_severity("침수 없음")
 
 
 # --- feature 파싱 ---

@@ -146,3 +146,27 @@ def metric_extremes(
     결과는 이미 정렬돼 있다 — raw_value 를 보고 다시 순서를 뒤집지 않는다.
     """
     return actions.act_metric_extremes(ctx.context, metric=metric, direction=direction, limit=limit)
+
+
+@function_tool
+def hazard_polygons(
+    ctx: RunContextWrapper[SessionState], station_id: str, radius_m: float = 800.0
+) -> dict[str, Any]:
+    """역 하나 주변의 홍수·토사재해·액상화·해일·쓰나미 **원본** MLIT Polygon (3D 시각화용).
+
+    "이 역 침수 위험을 3D로/입체로 보여줘"처럼 원본 구역 경계·침수深 구간을
+    묻는 질문에 쓴다. metric_distribution(정규화 percentile)과는 다른 툴이다.
+    요청마다 MLIT을 실시간 호출하므로(과금 없음) 역 하나에만 쓴다.
+    """
+    return actions.act_hazard_polygons(ctx.context, station_id, radius_m=radius_m)
+
+
+@function_tool
+def zoning_massing(
+    ctx: RunContextWrapper[SessionState], station_id: str, radius_m: float = 500.0
+) -> dict[str, Any]:
+    """역 하나 주변의 용도지역 **원본** MLIT Polygon (3D 도시 밀도 시각화용).
+
+    "이 역 주변 건물 밀도/저층·상업지역을 3D로 보여줘"처럼 물을 때 쓴다.
+    """
+    return actions.act_zoning_massing(ctx.context, station_id, radius_m=radius_m)

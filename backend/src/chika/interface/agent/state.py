@@ -7,10 +7,12 @@ from typing import Any
 
 from chika.application.usecase.compare_areas import CompareAreas
 from chika.application.usecase.explain_area import ExplainArea
+from chika.application.usecase.hazard_polygons import HazardPolygons
 from chika.application.usecase.metric_distribution import MetricDistribution
 from chika.application.usecase.metric_extremes import MetricExtremes
 from chika.application.usecase.rank_areas import RankAreas, RankedArea
 from chika.application.usecase.ward_price import WardPriceRanking
+from chika.application.usecase.zoning_massing import ZoningMassing
 from chika.domain.model.criteria import SearchCriteria
 
 
@@ -22,6 +24,10 @@ class UseCases:
     distribution: MetricDistribution
     ward_price: WardPriceRanking
     extremes: MetricExtremes
+    #: 원본 Polygon 3D 시각화용 — 배치가 아니라 요청 단위 실시간 MLIT 호출이다
+    #: (hazard_polygons.py/zoning_massing.py 참고).
+    hazard_polygons: HazardPolygons
+    zoning_massing: ZoningMassing
 
 
 @dataclass

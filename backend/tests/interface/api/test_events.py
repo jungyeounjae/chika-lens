@@ -9,6 +9,7 @@ import json
 from chika.interface.api.events import (
     done_event,
     error_event,
+    status_event,
     text_event,
     tool_event,
 )
@@ -44,6 +45,12 @@ def test_korean_text_is_not_escaped() -> None:
     assert "\\u" not in text_event("신오쿠보")["data"]
 
 
+def test_status_event_carries_the_text() -> None:
+    name, data = _parse(status_event("역세권 순위 계산하는 중..."))
+    assert name == "status"
+    assert data == {"text": "역세권 순위 계산하는 중..."}
+
+
 def test_done_event_reports_remaining_budget() -> None:
     name, data = _parse(done_event(remaining_today=7))
     assert name == "done"
@@ -62,5 +69,6 @@ def test_events_never_contain_raw_newlines_in_data() -> None:
         text_event("첫 줄\n둘째 줄"),
         error_event("boom", "여러\n줄\n메시지"),
         tool_event("t", {"note": "줄\n바꿈"}),
+        status_event("첫 줄\n둘째 줄"),
     ):
         assert "\n" not in raw["data"]

@@ -2,14 +2,18 @@ import pytest
 
 from chika.application.usecase.compare_areas import CompareAreas
 from chika.application.usecase.explain_area import ExplainArea
+from chika.application.usecase.hazard_polygons import HazardPolygons
 from chika.application.usecase.metric_distribution import MetricDistribution
 from chika.application.usecase.metric_extremes import MetricExtremes
 from chika.application.usecase.rank_areas import RankAreas
 from chika.application.usecase.ward_price import WardPriceRanking
+from chika.application.usecase.zoning_massing import ZoningMassing
 from chika.domain.model.criteria import Household
 from chika.domain.model.metrics import MetricKey, RawMetrics
+from chika.domain.model.polygon import HazardPolygon, ZoningPolygon
 from chika.domain.model.station import Station
 from chika.domain.model.weights import Dial
+from chika.etl.mlit_client import MlitApiError
 from chika.infrastructure.fake.repositories import (
     FakeAreaMetricsRepository,
     FakeCommuteRepository,
@@ -19,14 +23,57 @@ from chika.infrastructure.fake.seed import build_seed
 from chika.interface.agent.actions import (
     act_compare_areas,
     act_explain_area,
+    act_hazard_polygons,
     act_lookup_station,
     act_metric_distribution,
     act_metric_extremes,
     act_rank_areas,
     act_set_criteria,
     act_ward_price_ranking,
+    act_zoning_massing,
 )
 from chika.interface.agent.state import SessionState, UseCases
+
+
+class _FakeHazardPolygonSource:
+    """`HazardPolygonSource` 포트의 테스트 더블. 실제 MLIT 호출이 없다."""
+
+    def polygons_near(
+        self, lat: float, lon: float, radius_m: float
+    ) -> list[HazardPolygon]:
+        return []
+
+
+class _FakeZoningPolygonSource:
+    """`ZoningPolygonSource` 포트의 테스트 더블. 실제 MLIT 호출이 없다."""
+
+    def polygons_near(
+        self, lat: float, lon: float, radius_m: float
+    ) -> list[ZoningPolygon]:
+        return []
+
+
+class _FakeHazardPolygonSourceWith:
+    def __init__(self, polygons: list[HazardPolygon]) -> None:
+        self._polygons = polygons
+
+    def polygons_near(self, lat: float, lon: float, radius_m: float) -> list[HazardPolygon]:
+        return self._polygons
+
+
+class _FakeZoningPolygonSourceWith:
+    def __init__(self, polygons: list[ZoningPolygon]) -> None:
+        self._polygons = polygons
+
+    def polygons_near(self, lat: float, lon: float, radius_m: float) -> list[ZoningPolygon]:
+        return self._polygons
+
+
+class _RaisingHazardPolygonSource:
+    """MLIT 서버 장애 시나리오 — `mlit_unavailable` 오류 처리를 검증한다."""
+
+    def polygons_near(self, lat: float, lon: float, radius_m: float) -> list[HazardPolygon]:
+        raise MlitApiError("HTTP 503: 서버 오류")
 
 
 def _station(
@@ -66,6 +113,8 @@ def _deterministic_state(
             distribution=MetricDistribution(areas),
             ward_price=WardPriceRanking(areas),
             extremes=MetricExtremes(areas),
+            hazard_polygons=HazardPolygons(areas, _FakeHazardPolygonSource()),
+            zoning_massing=ZoningMassing(areas, _FakeZoningPolygonSource()),
         )
     )
 
@@ -82,6 +131,8 @@ def state() -> SessionState:
             distribution=MetricDistribution(areas),
             ward_price=WardPriceRanking(areas),
             extremes=MetricExtremes(areas),
+            hazard_polygons=HazardPolygons(areas, _FakeHazardPolygonSource()),
+            zoning_massing=ZoningMassing(areas, _FakeZoningPolygonSource()),
         )
     )
 
@@ -927,3 +978,100 @@ def test_metric_extremes_does_not_require_criteria() -> None:
     assert session.criteria is None
     result = act_metric_extremes(session, "disaster_risk")
     assert "error" not in result
+
+
+def test_metric_extremes_flags_all_tied_values() -> None:
+    """쓰나미위험처럼 전 역이 raw_value 0.0으로 묶여 있으면 "가장 위험한
+    N곳"이 실은 동점자 임의 순서다 — 이 신호가 없으면 LLM이 순위가 있는
+    것처럼 지어내 답한다(실사용에서 확인, 2026-09-10)."""
+    session = _deterministic_state(
+        [_station("a"), _station("b")],
+        [_raw("a", tsunami_risk=0.0), _raw("b", tsunami_risk=0.0)],
+    )
+    result = act_metric_extremes(session, "tsunami_risk", direction="worst")
+    assert result["all_tied"] is True
+
+
+def test_metric_extremes_does_not_flag_distinct_values() -> None:
+    session = _deterministic_state(
+        [_station("safe"), _station("risky")],
+        [_raw("safe", disaster_risk=0.1), _raw("risky", disaster_risk=1.0)],
+    )
+    result = act_metric_extremes(session, "disaster_risk", direction="worst")
+    assert result["all_tied"] is False
+
+
+# --- hazard_polygons / zoning_massing: 원본 Polygon 3D 시각화 (스펙 §3.1.2 정정) ---
+
+
+def _state_with_sources(hazard_source, zoning_source) -> SessionState:  # noqa: ANN001
+    stations = [_station("a")]
+    areas = FakeAreaMetricsRepository(stations, [_raw("a")])
+    return SessionState(
+        usecases=UseCases(
+            rank=RankAreas(areas, FakeCommuteRepository({}), FakePriceRepository({})),
+            explain=ExplainArea(areas, FakePriceRepository({})),
+            compare=CompareAreas(areas),
+            distribution=MetricDistribution(areas),
+            ward_price=WardPriceRanking(areas),
+            extremes=MetricExtremes(areas),
+            hazard_polygons=HazardPolygons(areas, hazard_source),
+            zoning_massing=ZoningMassing(areas, zoning_source),
+        )
+    )
+
+
+def test_hazard_polygons_returns_the_polygons_and_attribution() -> None:
+    geometry = {"type": "Polygon", "coordinates": []}
+    polygon = HazardPolygon(layer="flood", geometry=geometry, severity=0.5, label="3.0m~5.0m")
+    hazard_source = _FakeHazardPolygonSourceWith([polygon])
+    session = _state_with_sources(hazard_source, _FakeZoningPolygonSource())
+
+    result = act_hazard_polygons(session, "a")
+
+    assert result["station_id"] == "a"
+    assert result["attribution"] == "出典：国土交通省 不動産情報ライブラリ"
+    assert result["polygons"] == [
+        {"layer": "flood", "geometry": geometry, "severity": 0.5, "label": "3.0m~5.0m"}
+    ]
+
+
+def test_hazard_polygons_rejects_an_unknown_station() -> None:
+    session = _state_with_sources(_FakeHazardPolygonSource(), _FakeZoningPolygonSource())
+    result = act_hazard_polygons(session, "not_a_station")
+    assert result["error"] == "unknown_station"
+
+
+def test_hazard_polygons_reports_when_mlit_is_unreachable() -> None:
+    session = _state_with_sources(_RaisingHazardPolygonSource(), _FakeZoningPolygonSource())
+    result = act_hazard_polygons(session, "a")
+    assert result["error"] == "mlit_unavailable"
+
+
+def test_zoning_massing_returns_the_polygons_and_attribution() -> None:
+    polygon = ZoningPolygon(
+        geometry={"type": "Polygon", "coordinates": []},
+        youto_id=1,
+        use_area_ja="第一種低層住居専用地域",
+        height_m=10.0,
+    )
+    zoning_source = _FakeZoningPolygonSourceWith([polygon])
+    session = _state_with_sources(_FakeHazardPolygonSource(), zoning_source)
+
+    result = act_zoning_massing(session, "a")
+
+    assert result["attribution"] == "出典：国土交通省 不動産情報ライブラリ"
+    assert result["polygons"] == [
+        {
+            "geometry": {"type": "Polygon", "coordinates": []},
+            "youto_id": 1,
+            "use_area_ja": "第一種低層住居専用地域",
+            "height_m": 10.0,
+        }
+    ]
+
+
+def test_zoning_massing_rejects_an_unknown_station() -> None:
+    session = _state_with_sources(_FakeHazardPolygonSource(), _FakeZoningPolygonSource())
+    result = act_zoning_massing(session, "not_a_station")
+    assert result["error"] == "unknown_station"

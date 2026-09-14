@@ -38,6 +38,7 @@ _METRIC_RANGE: dict[MetricKey, tuple[float, float]] = {
     MetricKey.FLOOD_RISK: (0.0, 1.0),
     MetricKey.STORM_SURGE_RISK: (0.0, 1.0),
     MetricKey.SEDIMENT_RISK: (0.0, 1.0),
+    MetricKey.TSUNAMI_RISK: (0.0, 1.0),
     MetricKey.DAILY_RIDERSHIP: (500.0, 300_000.0),
     MetricKey.LARGE_RETAIL: (0.0, 5.0),
     MetricKey.ELEMENTARY_SCHOOL: (0.0, 8.0),

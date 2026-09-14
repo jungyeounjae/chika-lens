@@ -30,6 +30,15 @@ def tool_event(tool: str, result: Any) -> Event:
     return {"event": "tool", "data": _encode({"tool": tool, "result": result})}
 
 
+def status_event(text: str) -> Event:
+    """툴이 실행되는 동안의 중간 상태 — "역세권 순위 계산 중..." 같은 것.
+
+    `tool_event` 는 툴이 끝난 뒤에만 나가서, 그 사이 프론트가 아무 신호도
+    못 받고 정적 "…" 만 보여주고 있었다. 이건 그 공백을 메운다.
+    """
+    return {"event": "status", "data": _encode({"text": text})}
+
+
 def done_event(remaining_today: int) -> Event:
     """스트림 종료. 남은 일일 예산을 함께 알려 프론트가 표시할 수 있게 한다."""
     return {"event": "done", "data": _encode({"remaining_today": remaining_today})}

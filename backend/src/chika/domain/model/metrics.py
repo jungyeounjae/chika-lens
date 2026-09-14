@@ -1,5 +1,5 @@
 """지표 정의. 스펙 §6.2 지표 15개 중 14개(음식점 다양성은 2026-09-10 제거)
-+ 다이얼 채점에는 안 들어가는 진단용 6개(액상화·홍수·해일·토사재해 4개 +
++ 다이얼 채점에는 안 들어가는 진단용 7개(액상화·홍수·해일·토사재해·쓰나미 5개 +
 유동인구·주거전용지역 비율 2개) + 다이얼에 반영되는 추가 지표 3개
 (복합쇼핑몰·백화점, 초등학교, 중학교)의 유일한 정의처."""
 
@@ -16,8 +16,8 @@ class MetricKey(StrEnum):
     """스펙 §6.2의 지표 15개 중 14개(10번 음식점 다양성은 결번). 순서는
     스펙 표의 번호와 같다.
 
-    16~19(`LIQUEFACTION_RISK`·`FLOOD_RISK`·`STORM_SURGE_RISK`·`SEDIMENT_RISK`)는
-    스펙 §6.2에 없다 — `disaster_risk`(14)는 이 4개 레이어의 **최댓값**이라
+    16~19·25(`LIQUEFACTION_RISK`·`FLOOD_RISK`·`STORM_SURGE_RISK`·`SEDIMENT_RISK`·
+    `TSUNAMI_RISK`)는 스펙 §6.2에 없다 — `disaster_risk`(14)는 이 5개 레이어의 **최댓값**이라
     어느 레이어가 원인인지가 합치는 순간 사라진다. "홍수만", "액상화만"처럼
     레이어 하나를 따로 물어보는 질문에 답하려고 원래 raw severity를 그대로
     남겨 둔다. `dials.DIAL_TO_METRICS`에는 일부러 안 넣는다 — 넣으면 같은
@@ -74,15 +74,17 @@ class MetricKey(StrEnum):
     ELEMENTARY_SCHOOL = "elementary_school"           # 22 (다이얼 반영 — family)
     MIDDLE_SCHOOL = "middle_school"                   # 23 (다이얼 반영 — family)
     RESIDENTIAL_ZONE_RATIO = "residential_zone_ratio" # 24 (방향 없음, 다이얼 미반영·진단용)
+    TSUNAMI_RISK = "tsunami_risk"                     # 25 (감점, 다이얼 미반영·진단용)
 
 
-#: disaster_risk 를 구성하는 4개 레이어별 진단용 지표. 순회할 때 한 곳만
+#: disaster_risk 를 구성하는 5개 레이어별 진단용 지표. 순회할 때 한 곳만
 #: 고치면 되게 묶어 둔다 (build_hazards.py, seed.py 가 이 목록을 쓴다).
 HAZARD_LAYER_METRICS: tuple[MetricKey, ...] = (
     MetricKey.LIQUEFACTION_RISK,
     MetricKey.FLOOD_RISK,
     MetricKey.STORM_SURGE_RISK,
     MetricKey.SEDIMENT_RISK,
+    MetricKey.TSUNAMI_RISK,
 )
 
 #: "높을수록 좋다/나쁘다"가 없는 지표. `AreaMetrics.percentile`의 문서화된
@@ -145,6 +147,7 @@ METRIC_LABELS_KO: Mapping[MetricKey, str] = {
     MetricKey.ELEMENTARY_SCHOOL: "초등학교",
     MetricKey.MIDDLE_SCHOOL: "중학교",
     MetricKey.RESIDENTIAL_ZONE_RATIO: "주거전용지역 비율",
+    MetricKey.TSUNAMI_RISK: "쓰나미위험",
 }
 
 #: 원시값의 단위. 대부분은 반경 800m 안의 시설 개수지만 셋은 다르다.
@@ -181,6 +184,7 @@ METRIC_UNITS: Mapping[MetricKey, str] = {
     MetricKey.ELEMENTARY_SCHOOL: "곳",
     MetricKey.MIDDLE_SCHOOL: "곳",
     MetricKey.RESIDENTIAL_ZONE_RATIO: "%",
+    MetricKey.TSUNAMI_RISK: "지수(0~1, 클수록 위험)",
 }
 
 

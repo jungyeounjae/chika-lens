@@ -12,7 +12,7 @@ from agents import Runner
 
 from chika.interface.agent.agents import build_agents
 from chika.interface.agent.state import SessionState
-from chika.interface.api.events import Event, text_event, tool_event
+from chika.interface.api.events import Event, status_event, text_event, tool_event
 
 #: Responses API 의 텍스트 증분 이벤트.
 #:
@@ -20,6 +20,22 @@ from chika.interface.api.events import Event, text_event, tool_event
 #: 타입을 보지 않고 delta 만 흘려보내면 툴 인자 JSON이 사용자 화면에 그대로
 #: 찍힌다. 실측으로 확인한 버그다.
 _TEXT_DELTA = "response.output_text.delta"
+
+#: 툴 이름 -> 실행 중 상태 문구. ChatGPT·제미나이의 "웹 검색 중..." 같은
+#: 실시간 표시를 흉내낸다. 여기 없는 툴은 이름을 그대로 보여준다 —
+#: 새 툴을 추가하고 이 표를 잊어도 화면이 비지는 않는다.
+_TOOL_STATUS_KO: dict[str, str] = {
+    "set_criteria": "조건 확인하는 중...",
+    "lookup_station": "역 찾는 중...",
+    "rank_areas": "역세권 순위 계산하는 중...",
+    "explain_area": "역 정보 분석하는 중...",
+    "compare_areas": "비교하는 중...",
+    "metric_distribution": "주변 지표 조회하는 중...",
+    "ward_price_ranking": "구 단위 시세 조회하는 중...",
+    "metric_extremes": "전체 역 정렬하는 중...",
+    "hazard_polygons": "재해 구역 3D 데이터 가져오는 중...",
+    "zoning_massing": "용도지역 3D 데이터 가져오는 중...",
+}
 
 
 async def run_turn(state: SessionState, message: str) -> AsyncIterator[Event]:
@@ -50,6 +66,11 @@ async def run_turn(state: SessionState, message: str) -> AsyncIterator[Event]:
             call_id, name = _call_id(item.raw_item), _tool_name(item.raw_item)
             if call_id and name:
                 names_by_call[call_id] = name
+            if name:
+                # 결과를 기다리지 않고 바로 내보낸다 — 그래야 "…" 대신
+                # 실시간 상태가 뜬다. 결과는 tool_call_output_item 에서
+                # 별도로 나간다(아래).
+                yield status_event(_TOOL_STATUS_KO.get(name, f"{name} 처리하는 중..."))
             continue
 
         if item.type == "tool_call_output_item":

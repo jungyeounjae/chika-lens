@@ -30,6 +30,8 @@ def test_analysis_agent_exposes_the_analysis_tools() -> None:
         "metric_distribution",
         "ward_price_ranking",
         "metric_extremes",
+        "hazard_polygons",
+        "zoning_massing",
     }
 
 

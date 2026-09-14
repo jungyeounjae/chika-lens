@@ -27,6 +27,7 @@ from chika.domain.model.station import Station
 from chika.domain.model.weights import DIAL_LABELS_KO, Dial, DialSettings, Weights
 from chika.domain.service.dials import DIAL_TO_METRICS, expand_dials
 from chika.domain.service.personas import seed_dials
+from chika.etl.mlit_client import MlitApiError
 from chika.interface.agent.state import SessionState
 
 #: 구 랭킹에서 한 번에 낼 상한. 23구뿐이라 크게 잡을 이유가 없다.
@@ -424,10 +425,12 @@ def act_compare_areas(state: SessionState, station_ids: Sequence[str]) -> dict[s
 def act_metric_distribution(state: SessionState, station_id: str, metric: str) -> dict[str, Any]:
     """한 지표를 주변 역 지도 색칠용으로 낸다.
 
-    MLIT 서약(스펙 §3.1.2) 때문에 재해위험 등의 원본 Polygon은 지도에 못
-    그린다 — 여기서 내는 값은 원본 구역이 아니라 우리가 정규화한 역 단위
-    percentile 이므로 서약 밖이다. 조건(criteria)이 필요 없다 — 다이얼
-    가중치가 아니라 지표 하나의 순수한 분포를 보는 것이라서다.
+    재해위험 등의 원본 Polygon 대신 우리가 정규화한 역 단위 percentile 을
+    낸다 — MLIT 라이선스가 막아서가 아니라(스펙 §3.1.2 정정 참고, 실제
+    PDL1.0은 출처 표기 조건으로 원본 표시를 허용한다) 등급 체계가 지표마다
+    달라(액상화 5단계·홍수 6단계 등) percentile 로 통일해야 서로 비교가
+    된다는 설계상 이유다. 조건(criteria)이 필요 없다 — 다이얼 가중치가
+    아니라 지표 하나의 순수한 분포를 보는 것이라서다.
     """
     try:
         key = MetricKey(metric)
@@ -568,12 +571,20 @@ def act_metric_extremes(
     if not points:
         return {"error": "no_data", "metric": key.value}
 
+    # 쓰나미위험처럼 489역 전체가 raw_value 0.0으로 묶여 있으면, "가장
+    # 나쁜 N곳"은 실은 동점자 중 임의 순서일 뿐이다. 이 신호가 없으면
+    # LLM이 그 순서를 "위험이 상대적으로 높은 곳"이라고 지어내 답한다
+    # (실사용에서 확인된 오답, 2026-09-10).
+    raw_values = {p.raw_value for p in points if p.raw_value is not None}
+    all_tied = len(raw_values) <= 1
+
     return {
         "metric": key.value,
         "label": METRIC_LABELS_KO[key],
         "unit": METRIC_UNITS[key],
         "is_ward_resolution": key in WARD_RESOLUTION_METRICS,
         "direction": direction,
+        "all_tied": all_tied,
         "points": [
             {
                 "station_id": p.station.id,
@@ -585,5 +596,89 @@ def act_metric_extremes(
                 "raw_value": display_raw_value(key, p.raw_value),
             }
             for p in points
+        ],
+    }
+
+
+#: 출처 표기 — PDL1.0이 요구하는 유일한 조건이다(스펙 §3.1.2 정정).
+MLIT_ATTRIBUTION = "出典：国土交通省 不動産情報ライブラリ"
+
+#: 반경 상한. 값을 무한정 키우면 타일 수가 폭증해 요청 하나가 배치처럼
+#: 느려진다 — 이 두 툴은 "역 하나 주변"을 보는 용도지 배치가 아니다.
+_MAX_POLYGON_RADIUS_M = 2_000.0
+
+
+def act_hazard_polygons(
+    state: SessionState, station_id: str, radius_m: float = 800.0
+) -> dict[str, Any]:
+    """역 하나 주변의 홍수·토사재해·액상화·해일·쓰나미 원본 Polygon — 3D 압출 시각화 재료.
+
+    metric_distribution(정규화 percentile)과 다르다 — 여기는 MLIT 원본
+    구역 경계와 실제 등급(침수深 구간·Yellow/Red)을 그대로 낸다. 요청마다
+    MLIT을 실시간으로 호출하므로(호출 과금 없음) 489역 전체가 아니라 사용자가
+    콕 집은 역 하나에만 쓴다. 답할 때 반드시 출처(`attribution`)를 밝힌다 —
+    PDL1.0의 유일한 조건이다.
+    """
+    radius = max(1.0, min(radius_m, _MAX_POLYGON_RADIUS_M))
+    try:
+        station, polygons = state.usecases.hazard_polygons.execute(station_id, radius_m=radius)
+    except KeyError:
+        return {"error": "unknown_station", "station_id": station_id}
+    except MlitApiError as exc:
+        return {"error": "mlit_unavailable", "detail": str(exc)}
+
+    return {
+        "station_id": station.id,
+        "name_ja": station.name_ja,
+        "ward": station.ward,
+        "lat": station.lat,
+        "lon": station.lon,
+        "radius_m": radius,
+        "attribution": MLIT_ATTRIBUTION,
+        "polygons": [
+            {
+                "layer": p.layer,
+                "geometry": p.geometry,
+                "severity": round(p.severity, 3),
+                "label": p.label,
+            }
+            for p in polygons
+        ],
+    }
+
+
+def act_zoning_massing(
+    state: SessionState, station_id: str, radius_m: float = 500.0
+) -> dict[str, Any]:
+    """역 하나 주변의 용도지역 원본 Polygon — 3D 도시 밀도(매싱) 시각화 재료.
+
+    `height_m`은 실제 법정 높이 제한이 아니라 저층/고밀 대비를 보여주기 위한
+    일러스트용 근사치다(zoning_massing.py 참고) — 답할 때 이 사실과 출처
+    (`attribution`)를 함께 밝힌다.
+    """
+    radius = max(1.0, min(radius_m, _MAX_POLYGON_RADIUS_M))
+    try:
+        station, polygons = state.usecases.zoning_massing.execute(station_id, radius_m=radius)
+    except KeyError:
+        return {"error": "unknown_station", "station_id": station_id}
+    except MlitApiError as exc:
+        return {"error": "mlit_unavailable", "detail": str(exc)}
+
+    return {
+        "station_id": station.id,
+        "name_ja": station.name_ja,
+        "ward": station.ward,
+        "lat": station.lat,
+        "lon": station.lon,
+        "radius_m": radius,
+        "attribution": MLIT_ATTRIBUTION,
+        "polygons": [
+            {
+                "geometry": p.geometry,
+                "youto_id": p.youto_id,
+                "use_area_ja": p.use_area_ja,
+                "height_m": p.height_m,
+            }
+            for p in polygons
         ],
     }

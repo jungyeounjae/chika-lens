@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from typing import Protocol
 
 from chika.domain.model.criteria import Household
+from chika.domain.model.facility import SchoolFacility
 from chika.domain.model.metrics import RawMetrics
 from chika.domain.model.new_construction import NewConstructionListing
 from chika.domain.model.polygon import HazardPolygon, ZoningPolygon
@@ -56,3 +57,11 @@ class NewConstructionRepository(Protocol):
     """신축 분양 물건 조회 포트. 실시간 크롤링이 아니라 배치 산출물을 읽는다."""
 
     def listings(self) -> Sequence[NewConstructionListing]: ...
+
+
+class SchoolFacilitySource(Protocol):
+    """학교/보육시설 3D 시각화 포트. 요청 단위 실시간 조회 — 배치가 아니다."""
+
+    def facilities_near(
+        self, lat: float, lon: float, radius_m: float
+    ) -> Sequence[SchoolFacility]: ...

@@ -7,6 +7,7 @@ from typing import Protocol
 
 from chika.domain.model.criteria import Household
 from chika.domain.model.metrics import RawMetrics
+from chika.domain.model.new_construction import NewConstructionListing
 from chika.domain.model.polygon import HazardPolygon, ZoningPolygon
 from chika.domain.model.station import Station
 
@@ -49,3 +50,9 @@ class PriceRepository(Protocol):
         키의 부재가 '시세를 모른다'는 뜻이다. 위와 같은 이유로 배치 조회다.
         """
         ...
+
+
+class NewConstructionRepository(Protocol):
+    """신축 분양 물건 조회 포트. 실시간 크롤링이 아니라 배치 산출물을 읽는다."""
+
+    def listings(self) -> Sequence[NewConstructionListing]: ...

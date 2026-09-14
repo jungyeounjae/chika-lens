@@ -73,13 +73,6 @@ SEDIMENT_HAZARD = MlitDataset("XKT029", "土砂災害警戒区域", "bs031_sedim
 #: z=13/16 은 400 — 액상화·해일·토사와 같은 z=13 이 아니라 z=14/15 만 허용됐다
 #: (실측 2026-09-10). z=14 를 쓴다(타일 수가 z=15 보다 적다).
 TSUNAMI = MlitDataset("XKT028", "津波浸水想定", "bs032_tsunami_area", zoom=14)
-HAZARD_DATASETS: Sequence[MlitDataset] = (
-    LIQUEFACTION,
-    FLOOD,
-    STORM_SURGE,
-    SEDIMENT_HAZARD,
-    TSUNAMI,
-)
 
 #: 지표 20(유동인구)의 출처. 駅別乗降客数 — Geometry 가 역 지점이 아니라 노선
 #: 구간 LineString 이다 (mlit_ridership.py 가 대표점으로 바꾼다).

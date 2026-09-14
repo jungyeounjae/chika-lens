@@ -7,7 +7,7 @@ dependencies = []
 
 [project.optional-dependencies]
 agent = ["openai-agents>=0.1.0", "pydantic>=2.7"]
-etl = ["shapely>=2.0", "pyproj>=3.6"]
+etl = ["shapely>=2.0", "pyproj>=3.6", "beautifulsoup4>=4.12"]
 api = ["fastapi>=0.115", "uvicorn>=0.30", "sse-starlette>=2.1"]
 
 [dependency-groups]

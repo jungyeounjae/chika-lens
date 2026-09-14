@@ -157,6 +157,19 @@ export type ZoningMassingResult = {
   polygons: ZoningPolygon[];
 };
 
+export type ParkPolygon = {
+  geometry: GeoJsonGeometry;
+  name: string | null;
+};
+
+export type ParkPolygonResult = {
+  lat: number;
+  lon: number;
+  radius_m: number;
+  attribution: string;
+  polygons: ParkPolygon[];
+};
+
 /** `school_facilities` 결과 하나 — 좌표 주변 학교/유치원/보육시설.
  *
  * station_id 가 없다 — 역이 아니라 좌표(신축 물건 등) 기준으로도 조회되기

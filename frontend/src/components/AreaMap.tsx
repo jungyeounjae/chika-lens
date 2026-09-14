@@ -8,6 +8,7 @@ import { MetricThreeLayer, type MetricBarConfig } from "@/components/metricThree
 import {
   PolygonThreeLayer,
   hazardPolygonToShapes,
+  parkPolygonToShapes,
   zoningPolygonToShapes,
 } from "@/components/polygonThreeLayer";
 import { FacilityThreeLayer, isPreschoolKind } from "@/components/facilityThreeLayer";
@@ -17,15 +18,17 @@ import type {
   HazardPolygonResult,
   MapPin,
   NearbyStation,
+  ParkPolygonResult,
   SchoolFacilitiesResult,
   ZoningMassingResult,
 } from "@/lib/types";
 
-/** hazard_polygons/zoning_massing 결과 — 원본 MLIT Polygon 3D 뷰.
+/** hazard_polygons/zoning_massing/park_polygons 결과 — 원본 Polygon 3D 뷰.
  * distribution/areas 보다 우선한다(가장 구체적인 "역 하나 딥다이브" 모드). */
 export type PolygonView =
   | { kind: "hazard"; result: HazardPolygonResult }
-  | { kind: "zoning"; result: ZoningMassingResult };
+  | { kind: "zoning"; result: ZoningMassingResult }
+  | { kind: "park"; result: ParkPolygonResult };
 
 /** 좋고 나쁨이 없는 지표(백엔드 DIRECTIONLESS_METRICS 와 맞춘다) — 유동인구는
  * "많다/적다"이지 "좋다/나쁘다"가 아니다. 3D 막대에서는 이 지표들만
@@ -176,16 +179,22 @@ export const AreaMap = memo(function AreaMap({
       const shapes =
         polygonView.kind === "hazard"
           ? polygonView.result.polygons.flatMap(hazardPolygonToShapes)
-          : polygonView.result.polygons.flatMap(zoningPolygonToShapes);
+          : polygonView.kind === "zoning"
+            ? polygonView.result.polygons.flatMap(zoningPolygonToShapes)
+            : polygonView.result.polygons.flatMap(parkPolygonToShapes);
       polygonLayer.current?.setShapes(shapes);
 
-      const { lat, lon, name_ja, ward, radius_m } = polygonView.result;
+      const { lat, lon, radius_m } = polygonView.result;
+      const popupText =
+        polygonView.kind === "park"
+          ? "공원 지역"
+          : `${polygonView.result.name_ja} (${polygonView.result.ward})`;
       const pin = document.createElement("div");
       pin.className =
         "h-4 w-4 rounded-full border-2 border-white bg-rose-600 shadow-lg";
       const marker = new maplibregl.Marker({ element: pin })
         .setLngLat([lon, lat])
-        .setPopup(new maplibregl.Popup({ offset: 10 }).setText(`${name_ja} (${ward})`))
+        .setPopup(new maplibregl.Popup({ offset: 10 }).setText(popupText))
         .addTo(instance);
       markers.current.push(marker);
 

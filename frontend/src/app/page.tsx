@@ -11,6 +11,7 @@ import type {
   MapPin,
   MetricDistribution,
   NearbyStation,
+  ParkPolygonResult,
   RankedArea,
   SchoolFacilitiesResult,
   ZoningMassingResult,
@@ -152,6 +153,17 @@ export default function Home() {
                   : { lat: zoning.lat, lon: zoning.lon, radiusM: zoning.radius_m },
               );
             }
+            if (event.tool === "park_polygons" && Array.isArray((event.result as { polygons?: unknown })?.polygons)) {
+              const park = event.result as ParkPolygonResult;
+              setDistribution(null);
+              setPolygonView({ kind: "park", result: park });
+              setFacilities(null);
+              setHighlightStation((prev) =>
+                prev?.lat === park.lat && prev?.lon === park.lon && prev?.radiusM === park.radius_m
+                  ? prev
+                  : { lat: park.lat, lon: park.lon, radiusM: park.radius_m },
+              );
+            }
             if (event.tool === "school_facilities" && Array.isArray((event.result as { facilities?: unknown })?.facilities)) {
               const school = event.result as SchoolFacilitiesResult;
               setDistribution(null);
@@ -218,7 +230,11 @@ export default function Home() {
         {polygonView && (
           <div className="absolute bottom-3 left-3 rounded-lg border border-neutral-200 bg-white/95 px-3 py-2 text-xs shadow dark:border-neutral-700 dark:bg-neutral-900/95">
             <p className="font-medium">
-              {polygonView.kind === "hazard" ? "재해위험 3D (원본 구역)" : "용도지역 3D (원본 구역)"}
+              {polygonView.kind === "hazard"
+                ? "재해위험 3D (원본 구역)"
+                : polygonView.kind === "zoning"
+                  ? "용도지역 3D (원본 구역)"
+                  : "공원 3D (OSM)"}
             </p>
             {polygonView.kind === "zoning" && (
               <p className="mt-0.5 text-neutral-500">높이는 실제 건축 높이 제한이 아니라 시각적 근사치입니다.</p>

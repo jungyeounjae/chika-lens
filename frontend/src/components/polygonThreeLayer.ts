@@ -4,7 +4,7 @@ import * as maplibregl from "maplibre-gl";
 import * as THREE from "three";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { getSharedRenderer } from "@/components/sharedThreeRenderer";
-import type { GeoJsonGeometry, HazardPolygon, ZoningPolygon } from "@/lib/types";
+import type { GeoJsonGeometry, HazardPolygon, ParkPolygon, ZoningPolygon } from "@/lib/types";
 
 export type ExtrudedShape = {
   /** 외곽 링만 쓴다(구멍 무시) — MLIT 재해·용도지역 폴리곤은 이 지역에서
@@ -90,6 +90,18 @@ export function zoningPolygonToShapes(polygon: ZoningPolygon): ExtrudedShape[] {
     heightM: polygon.height_m,
     color,
     opacity: 0.7,
+  }));
+}
+
+const PARK_COLOR = new THREE.Color(0x4ade80); // green-400
+const PARK_HEIGHT_M = 2.0;
+
+export function parkPolygonToShapes(polygon: ParkPolygon): ExtrudedShape[] {
+  return exteriorRings(polygon.geometry).map((ring) => ({
+    ring,
+    heightM: PARK_HEIGHT_M,
+    color: PARK_COLOR,
+    opacity: 0.55,
   }));
 }
 

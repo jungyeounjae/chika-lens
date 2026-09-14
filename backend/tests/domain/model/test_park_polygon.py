@@ -7,7 +7,18 @@ from chika.domain.model.polygon import ParkPolygon
 
 def test_a_park_polygon_can_be_constructed_with_a_name() -> None:
     polygon = ParkPolygon(
-        geometry={"type": "Polygon", "coordinates": [[[139.6, 35.76], [139.61, 35.76], [139.61, 35.77], [139.6, 35.77], [139.6, 35.76]]]},
+        geometry={
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [139.6, 35.76],
+                    [139.61, 35.76],
+                    [139.61, 35.77],
+                    [139.6, 35.77],
+                    [139.6, 35.76],
+                ]
+            ],
+        },
         name="北原公園",
     )
     assert polygon.name == "北原公園"

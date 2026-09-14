@@ -7,6 +7,7 @@ from typing import Protocol
 
 from chika.domain.model.criteria import Household
 from chika.domain.model.metrics import RawMetrics
+from chika.domain.model.polygon import HazardPolygon, ZoningPolygon
 from chika.domain.model.station import Station
 
 
@@ -14,6 +15,20 @@ class AreaMetricsRepository(Protocol):
     def stations(self) -> Sequence[Station]: ...
 
     def raw_metrics(self) -> Sequence[RawMetrics]: ...
+
+
+class HazardPolygonSource(Protocol):
+    """3D 시각화용 원본 재해 Polygon 조회 포트. 구현체가 거리 필터링·심각도
+    변환(shapely 등 외부 의존)을 끝내고 이미 걸러진 결과만 돌려준다."""
+
+    def polygons_near(self, lat: float, lon: float, radius_m: float) -> Sequence[HazardPolygon]: ...
+
+
+class ZoningPolygonSource(Protocol):
+    """3D 시각화용 원본 용도지역 Polygon 조회 포트. 위와 같은 이유로 구현체가
+    필터링을 끝낸 결과만 돌려준다."""
+
+    def polygons_near(self, lat: float, lon: float, radius_m: float) -> Sequence[ZoningPolygon]: ...
 
 
 class CommuteRepository(Protocol):

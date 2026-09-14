@@ -11,7 +11,7 @@ import json
 import math
 
 from chika.domain.model.polygon import ParkPolygon
-from chika.etl.overpass_client import OverpassClient
+from chika.etl.overpass_client import OverpassClient, OverpassFetchError
 
 
 def _bbox(lat: float, lon: float, radius_m: float) -> tuple[float, float, float, float]:
@@ -35,7 +35,18 @@ class OverpassParkSource:
             "out geom;"
         )
         raw = self._client.query(query)
-        data = json.loads(raw)
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise OverpassFetchError(
+                f"Overpass 응답이 JSON이 아니다 (길이 {len(raw)}자): {raw[:200]!r}"
+            ) from exc
+
+        remark = data.get("remark")
+        if remark:
+            # elements 가 비어 있어도 "0개 발견"이 아니라 쿼리 실패일 수 있다
+            # (예: 서버 타임아웃) — 빈 리스트로 조용히 넘기지 않는다.
+            raise OverpassFetchError(f"Overpass 쿼리 실패: {remark}")
 
         polygons: list[ParkPolygon] = []
         for element in data.get("elements", []):

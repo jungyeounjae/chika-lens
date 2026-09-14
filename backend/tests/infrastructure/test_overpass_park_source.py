@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 
-from chika.etl.overpass_client import OverpassClient
+import pytest
+
+from chika.etl.overpass_client import OverpassClient, OverpassFetchError
 from chika.infrastructure.overpass_park_source import OverpassParkSource
 
 QUERY_LAT, QUERY_LON = 35.760, 139.609
@@ -74,3 +76,29 @@ def test_no_elements_returns_an_empty_list() -> None:
     source = OverpassParkSource(client)
 
     assert source.polygons_near(QUERY_LAT, QUERY_LON, radius_m=800.0) == []
+
+
+def test_non_json_response_raises_overpass_fetch_error() -> None:
+    """게이트웨이 오류 페이지가 HTTP 200으로 오면 JSON 파싱이 아니라 에러여야 한다."""
+    client = OverpassClient(
+        transport=lambda url, body: b"<html>Bad Gateway</html>", sleep=lambda _: None
+    )
+    source = OverpassParkSource(client)
+
+    with pytest.raises(OverpassFetchError):
+        source.polygons_near(QUERY_LAT, QUERY_LON, radius_m=800.0)
+
+
+def test_a_remark_on_an_otherwise_empty_response_raises_instead_of_zero() -> None:
+    """빈 elements + remark 는 "0개 발견"이 아니라 서버 타임아웃 등의 실패다."""
+
+    def transport(url: str, body: bytes) -> bytes:
+        return json.dumps(
+            {"elements": [], "remark": "runtime error: Query timed out"}
+        ).encode()
+
+    client = OverpassClient(transport=transport, sleep=lambda _: None)
+    source = OverpassParkSource(client)
+
+    with pytest.raises(OverpassFetchError, match="Query timed out"):
+        source.polygons_near(QUERY_LAT, QUERY_LON, radius_m=800.0)

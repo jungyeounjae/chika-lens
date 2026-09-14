@@ -35,6 +35,7 @@ def test_analysis_agent_exposes_the_analysis_tools() -> None:
         "search_new_construction",
         "lookup_new_construction",
         "explain_new_construction",
+        "school_facilities",
     }
 
 

@@ -796,3 +796,42 @@ def act_explain_new_construction(state: SessionState, suumo_id: str) -> dict[str
     if listing is None:
         return {"error": "unknown_listing", "suumo_id": suumo_id}
     return _new_construction_payload(listing)
+
+
+#: 한 번에 LLM 에 넘기는 시설 상한 — 밀집 지역에서 payload 가 과하게
+#: 커지는 걸 막는다. 거리순 정렬 후 자르므로 가까운 곳부터 남는다.
+MAX_SCHOOL_FACILITIES_LIMIT = 20
+_MAX_SCHOOL_RADIUS_M = 1500.0  # 도보 통학권(초등~중학) 밖은 의미 없음
+
+
+def act_school_facilities(
+    state: SessionState, lat: float, lon: float, radius_m: float = 800.0
+) -> dict[str, Any]:
+    """좌표 하나 주변의 학교/보육시설 — 3D 마커 시각화 재료.
+
+    hazard_polygons 와 같은 이유로 요청마다 MLIT 을 실시간 호출한다(호출
+    과금 없음, 489역 전체가 아니라 사용자가 지목한 좌표 하나에만 쓴다).
+    """
+    radius = max(1.0, min(radius_m, _MAX_SCHOOL_RADIUS_M))
+    try:
+        facilities = state.usecases.school_facilities.execute(lat, lon, radius_m=radius)
+    except MlitApiError as exc:
+        return {"error": "mlit_unavailable", "detail": str(exc)}
+
+    capped = facilities[:MAX_SCHOOL_FACILITIES_LIMIT]
+    return {
+        "lat": lat,
+        "lon": lon,
+        "radius_m": radius,
+        "facilities": [
+            {
+                "facility_id": f.facility_id,
+                "name": f.name,
+                "kind": f.kind,
+                "lat": f.lat,
+                "lon": f.lon,
+                "distance_m": f.distance_m,
+            }
+            for f in capped
+        ],
+    }

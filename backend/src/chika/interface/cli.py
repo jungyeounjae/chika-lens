@@ -20,6 +20,7 @@ from chika.application.usecase.metric_distribution import MetricDistribution
 from chika.application.usecase.metric_extremes import MetricExtremes
 from chika.application.usecase.new_construction_search import NewConstructionSearch
 from chika.application.usecase.rank_areas import RankAreas
+from chika.application.usecase.school_facilities import SchoolFacilities
 from chika.application.usecase.ward_price import WardPriceRanking
 from chika.application.usecase.zoning_massing import ZoningMassing
 from chika.etl.lazy_new_construction import ensure_ward_crawled
@@ -33,6 +34,7 @@ from chika.infrastructure.fake.seed import build_seed
 from chika.infrastructure.file_metrics import FileAreaMetricsRepository
 from chika.infrastructure.file_new_construction import FileNewConstructionRepository
 from chika.infrastructure.mlit_hazard_source import MlitHazardPolygonSource
+from chika.infrastructure.mlit_school_source import MlitSchoolFacilitySource
 from chika.infrastructure.mlit_zoning_source import MlitZoningPolygonSource
 from chika.interface.agent.actions import act_explain_area, act_rank_areas, act_set_criteria
 from chika.interface.agent.state import SessionState, UseCases
@@ -70,6 +72,7 @@ def build_demo_session(
             ward_price=WardPriceRanking(areas),
             extremes=MetricExtremes(areas),
             hazard_polygons=HazardPolygons(areas, MlitHazardPolygonSource(client)),
+            school_facilities=SchoolFacilities(MlitSchoolFacilitySource(client)),
             zoning_massing=ZoningMassing(areas, MlitZoningPolygonSource(client)),
             new_construction=NewConstructionSearch(
                 FileNewConstructionRepository(new_construction_path)
@@ -129,6 +132,7 @@ def build_real_session(
             ward_price=WardPriceRanking(areas),
             extremes=MetricExtremes(areas),
             hazard_polygons=HazardPolygons(areas, MlitHazardPolygonSource(client)),
+            school_facilities=SchoolFacilities(MlitSchoolFacilitySource(client)),
             zoning_massing=ZoningMassing(areas, MlitZoningPolygonSource(client)),
             new_construction=NewConstructionSearch(
                 FileNewConstructionRepository(new_construction_path)

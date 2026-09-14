@@ -13,6 +13,7 @@ from chika.application.usecase.metric_distribution import MetricDistribution
 from chika.application.usecase.metric_extremes import MetricExtremes
 from chika.application.usecase.new_construction_search import NewConstructionSearch
 from chika.application.usecase.rank_areas import RankAreas, RankedArea
+from chika.application.usecase.school_facilities import SchoolFacilities
 from chika.application.usecase.ward_price import WardPriceRanking
 from chika.application.usecase.zoning_massing import ZoningMassing
 from chika.domain.model.criteria import SearchCriteria
@@ -31,6 +32,9 @@ class UseCases:
     #: (hazard_polygons.py/zoning_massing.py 참고).
     hazard_polygons: HazardPolygons
     zoning_massing: ZoningMassing
+    #: 학교/보육시설 3D 시각화용 — 배치가 아니라 요청 단위 실시간 MLIT 호출이다
+    #: (school_facilities.py 참고). 좌표 기반이라 역이든 신축 물건이든 쓴다.
+    school_facilities: SchoolFacilities
     #: SUUMO 신축 분양 물건 검색 — 배치 산출물(new_construction_enriched.json)만
     #: 읽는다. 실시간 크롤링 없음.
     new_construction: NewConstructionSearch

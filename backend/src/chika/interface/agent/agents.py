@@ -20,6 +20,7 @@ from chika.interface.agent.tools import (
     metric_distribution,
     metric_extremes,
     rank_areas,
+    school_facilities,
     search_new_construction,
     set_criteria,
     ward_price_ranking,
@@ -45,6 +46,7 @@ def build_agents() -> Agent[SessionState]:
             search_new_construction,
             lookup_new_construction,
             explain_new_construction,
+            school_facilities,
         ],
     )
     intake: Agent[SessionState] = Agent(

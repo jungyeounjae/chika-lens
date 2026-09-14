@@ -245,3 +245,20 @@ def explain_new_construction(
     있는 값을 그대로 쓴다.
     """
     return actions.act_explain_new_construction(ctx.context, suumo_id)
+
+
+@function_tool
+def school_facilities(
+    ctx: RunContextWrapper[SessionState], lat: float, lon: float, radius_m: float = 800.0
+) -> dict[str, Any]:
+    """좌표 주변의 학교·유치원·보육시설 위치를 낸다 — 3D 지도 마커 재료.
+
+    "아이 키우기 좋아?", "학교 가까워?", "이 동네 살기 좋아?"(교육 인프라
+    맥락) 같은 질문에 쓴다. `lat`/`lon`은 `rank_areas`/`search_new_construction`
+    결과에 이미 있는 좌표를 그대로 넘긴다 — 역이든 신축 물건이든 상관없다.
+
+    결과가 0건이면 "이 반경 안에 학교/보육시설이 없다"는 뜻이지 조회 실패가
+    아니다. `kind`는 원문 그대로(예: "小学校", "義務教育学校", 보육시설 종별) —
+    한국어로 지어내 번역하지 않는다(자연스럽게 풀어서 설명하는 것은 괜찮다).
+    """
+    return actions.act_school_facilities(ctx.context, lat=lat, lon=lon, radius_m=radius_m)

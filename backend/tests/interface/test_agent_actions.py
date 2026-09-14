@@ -7,9 +7,11 @@ from chika.application.usecase.metric_distribution import MetricDistribution
 from chika.application.usecase.metric_extremes import MetricExtremes
 from chika.application.usecase.new_construction_search import NewConstructionSearch
 from chika.application.usecase.rank_areas import RankAreas
+from chika.application.usecase.school_facilities import SchoolFacilities
 from chika.application.usecase.ward_price import WardPriceRanking
 from chika.application.usecase.zoning_massing import ZoningMassing
 from chika.domain.model.criteria import Household
+from chika.domain.model.facility import SchoolFacility
 from chika.domain.model.metrics import MetricKey, RawMetrics
 from chika.domain.model.new_construction import NewConstructionListing
 from chika.domain.model.polygon import HazardPolygon, ZoningPolygon
@@ -32,6 +34,7 @@ from chika.interface.agent.actions import (
     act_metric_distribution,
     act_metric_extremes,
     act_rank_areas,
+    act_school_facilities,
     act_search_new_construction,
     act_set_criteria,
     act_ward_price_ranking,
@@ -55,6 +58,15 @@ class _FakeZoningPolygonSource:
     def polygons_near(
         self, lat: float, lon: float, radius_m: float
     ) -> list[ZoningPolygon]:
+        return []
+
+
+class _FakeSchoolFacilitySource:
+    """`SchoolFacilitySource` 포트의 테스트 더블. 실제 MLIT 호출이 없다."""
+
+    def facilities_near(
+        self, lat: float, lon: float, radius_m: float
+    ) -> list[SchoolFacility]:
         return []
 
 
@@ -128,6 +140,7 @@ def _deterministic_state(
             extremes=MetricExtremes(areas),
             hazard_polygons=HazardPolygons(areas, _FakeHazardPolygonSource()),
             zoning_massing=ZoningMassing(areas, _FakeZoningPolygonSource()),
+            school_facilities=SchoolFacilities(_FakeSchoolFacilitySource()),
             new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
         )
     )
@@ -147,6 +160,7 @@ def state() -> SessionState:
             extremes=MetricExtremes(areas),
             hazard_polygons=HazardPolygons(areas, _FakeHazardPolygonSource()),
             zoning_massing=ZoningMassing(areas, _FakeZoningPolygonSource()),
+            school_facilities=SchoolFacilities(_FakeSchoolFacilitySource()),
             new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
         )
     )
@@ -1032,6 +1046,7 @@ def _state_with_sources(hazard_source, zoning_source) -> SessionState:  # noqa: 
             extremes=MetricExtremes(areas),
             hazard_polygons=HazardPolygons(areas, hazard_source),
             zoning_massing=ZoningMassing(areas, zoning_source),
+            school_facilities=SchoolFacilities(_FakeSchoolFacilitySource()),
             new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
         )
     )
@@ -1138,6 +1153,7 @@ def _state_with_new_construction(listings: list[NewConstructionListing]) -> Sess
             extremes=MetricExtremes(areas),
             hazard_polygons=HazardPolygons(areas, _FakeHazardPolygonSource()),
             zoning_massing=ZoningMassing(areas, _FakeZoningPolygonSource()),
+            school_facilities=SchoolFacilities(_FakeSchoolFacilitySource()),
             new_construction=NewConstructionSearch(_FakeNewConstructionRepo(listings)),
         )
     )
@@ -1233,3 +1249,105 @@ def test_lookup_new_construction_returns_empty_matches_for_an_empty_query() -> N
     result = act_lookup_new_construction(session, "  ")
 
     assert result == {"query": "  ", "matches": []}
+
+
+# --- school_facilities ---
+
+
+class _FakeSchoolFacilitySourceWith:
+    def __init__(self, facilities: list[SchoolFacility]) -> None:
+        self._facilities = facilities
+
+    def facilities_near(
+        self, lat: float, lon: float, radius_m: float
+    ) -> list[SchoolFacility]:
+        return self._facilities
+
+
+class _RaisingSchoolFacilitySource:
+    """MLIT 서버 장애 시나리오 — `mlit_unavailable` 오류 처리를 검증한다."""
+
+    def facilities_near(
+        self, lat: float, lon: float, radius_m: float
+    ) -> list[SchoolFacility]:
+        raise MlitApiError("HTTP 503: 서버 오류")
+
+
+def _state_with_school_source(source) -> SessionState:  # noqa: ANN001
+    stations = [_station("a")]
+    areas = FakeAreaMetricsRepository(stations, [_raw("a")])
+    return SessionState(
+        usecases=UseCases(
+            rank=RankAreas(areas, FakeCommuteRepository({}), FakePriceRepository({})),
+            explain=ExplainArea(areas, FakePriceRepository({})),
+            compare=CompareAreas(areas),
+            distribution=MetricDistribution(areas),
+            ward_price=WardPriceRanking(areas),
+            extremes=MetricExtremes(areas),
+            hazard_polygons=HazardPolygons(areas, _FakeHazardPolygonSource()),
+            zoning_massing=ZoningMassing(areas, _FakeZoningPolygonSource()),
+            new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
+            school_facilities=SchoolFacilities(source),
+        )
+    )
+
+
+def test_school_facilities_returns_facilities_within_radius() -> None:
+    facility = SchoolFacility(
+        facility_id="f1", name="光が丘第八小学校", kind="小学校",
+        lat=35.76, lon=139.61, distance_m=120.0,
+    )
+    session = _state_with_school_source(_FakeSchoolFacilitySourceWith([facility]))
+
+    result = act_school_facilities(session, lat=35.76, lon=139.61)
+
+    assert result["facilities"] == [
+        {
+            "facility_id": "f1",
+            "name": "光が丘第八小学校",
+            "kind": "小学校",
+            "lat": 35.76,
+            "lon": 139.61,
+            "distance_m": 120.0,
+        }
+    ]
+
+
+def test_school_facilities_returns_an_empty_list_when_none_are_nearby() -> None:
+    session = _state_with_school_source(_FakeSchoolFacilitySourceWith([]))
+
+    result = act_school_facilities(session, lat=35.76, lon=139.61)
+
+    assert result["facilities"] == []
+
+
+class _RecordingSchoolFacilitySource:
+    """호출 인자를 기록하는 더블 — 반경 클램프가 usecase 까지 실제로
+    전달되는지 확인하는 데 쓴다(빈 리스트만 돌려주면 클램프 여부를 검증할
+    수 없다)."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[float, float, float]] = []
+
+    def facilities_near(
+        self, lat: float, lon: float, radius_m: float
+    ) -> list[SchoolFacility]:
+        self.calls.append((lat, lon, radius_m))
+        return []
+
+
+def test_school_facilities_clamps_the_radius_to_the_maximum() -> None:
+    source = _RecordingSchoolFacilitySource()
+    session = _state_with_school_source(source)
+
+    act_school_facilities(session, lat=35.76, lon=139.61, radius_m=999_999.0)
+
+    assert source.calls == [(35.76, 139.61, 1500.0)]
+
+
+def test_school_facilities_reports_mlit_unavailable_on_error() -> None:
+    session = _state_with_school_source(_RaisingSchoolFacilitySource())
+
+    result = act_school_facilities(session, lat=35.76, lon=139.61)
+
+    assert result == {"error": "mlit_unavailable", "detail": "HTTP 503: 서버 오류"}

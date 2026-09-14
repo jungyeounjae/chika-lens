@@ -1351,3 +1351,39 @@ def test_school_facilities_reports_mlit_unavailable_on_error() -> None:
     result = act_school_facilities(session, lat=35.76, lon=139.61)
 
     assert result == {"error": "mlit_unavailable", "detail": "HTTP 503: 서버 오류"}
+
+
+def test_school_facilities_caps_the_result_to_twenty() -> None:
+    """20건 상한이 실제로 적용되는지 검증한다.
+
+    25개 시설을 반환하는 더블을 사용해서 반경 클램프와는 다른 로직
+    (거리순 정렬 후 자르기)이 제대로 작동하는지 확인한다.
+    거리순 정렬이 유지되지 않으면 이 테스트가 통과해도 슬라이싱이 빠지면 실패한다.
+    """
+    # 25개 시설, 거리순 0.0 → 1200.0 (50씩 증가)
+    facilities = [
+        SchoolFacility(
+            facility_id=f"f{i:02d}",
+            name=f"学校{i:02d}",
+            kind="小学校" if i % 2 == 0 else "保育園",
+            lat=35.76 + i * 0.001,
+            lon=139.61 + i * 0.001,
+            distance_m=float(i * 50),
+        )
+        for i in range(25)
+    ]
+    session = _state_with_school_source(_FakeSchoolFacilitySourceWith(facilities))
+
+    result = act_school_facilities(session, lat=35.76, lon=139.61)
+
+    # 정확히 20개만 반환되어야 함
+    assert len(result["facilities"]) == 20
+
+    # 가장 가까운 20개(f00부터 f19, 거리 0.0~950.0)가 거리순으로 정렬되어 있어야 함
+    returned_ids = [f["facility_id"] for f in result["facilities"]]
+    expected_ids = [f"f{i:02d}" for i in range(20)]
+    assert returned_ids == expected_ids
+
+    # 거리 오름차순 확인
+    distances = [f["distance_m"] for f in result["facilities"]]
+    assert distances == sorted(distances)

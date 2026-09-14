@@ -136,7 +136,7 @@ def _geocode_all(
         key = f"{listing.ward}{listing.address_raw}"
         if key not in cache:
             try:
-                coords = geocoder.geocode(f"東京都{listing.ward}{listing.address_raw}")
+                coords = geocoder.geocode(f"東京都{listing.address_raw}")
             except GeocodeFetchError as exc:
                 print(f"    지오코딩 실패, 결측으로 남긴다: {key} ({exc})")
                 coords = None

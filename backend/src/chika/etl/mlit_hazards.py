@@ -1,4 +1,4 @@
-"""지표 14(재해위험) 파싱과 집계. 4개 MLIT 하자드 레이어를 raw value 하나로 합친다.
+"""지표 14(재해위험) 파싱과 집계. 5개 MLIT 하자드 레이어를 raw value 하나로 합친다.
 
 각 레이어의 등급 필드 방향은 실측만으로는 못 정한다 — 프로브(2026-09-09)로
 값 도메인은 봤지만, 그 숫자가 뭘 뜻하는지는 공식 명세서로 확정했다:
@@ -34,6 +34,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -90,6 +91,19 @@ _STORM_SURGE_BANDS: tuple[str, ...] = (
 #: 2·4를 Red로 같은 값에 묶는다.
 _SEDIMENT_SEVERITY: dict[int, float] = {1: 0.6, 2: 1.0, 3: 0.6, 4: 1.0}
 
+#: 쓰나미 침수深 구분(`A40_003`). 공식 제품사양서(KsjTmplt-A40)에 "각
+#: 도도부현 보고서에 기재된 구간 문자열"이라고만 돼 있다 — 해일(`A49_003`)과
+#: 달리 국가 표준 코드표가 없다. 489역+여유 타일 전체 실측(2026-09-10)으로
+#: 확인한 값만도 神奈川県 7단계("1m以上 ～ 2m未満")·千葉県 6단계
+#: ("1.0m以上 3.0m未満")로 형식이 달랐다 — 문자열 화이트리스트로 박아두면
+#: 다음 도도부현마다 또 깨진다. 그래서 "X以上"의 X(m)를 그대로 읽어 20m
+#: (홍수·해일과 같은 想定最大規模 상한)로 나눈다 — 구간 상한이 아니라
+#: 하한을 쓰므로 폭이 다른 두 체계를 같은 척도로 섞어도 방향은 어긋나지
+#: 않는다. 東京都 자체는 이 레이어에 데이터가 없었다 — 23구는 도쿄만
+#: 안쪽이라 인접 현이 낸 지도가 경계 근처에만 걸친다(실측).
+_TSUNAMI_DEPTH_RE = re.compile(r"(\d+(?:\.\d+)?)\s*m\s*以上")
+_TSUNAMI_MAX_DEPTH_M = 20.0
+
 
 def liquefaction_severity(level: int) -> float | None:
     """`None` 은 이 폴리곤을 위험 신호로 쓰지 않는다는 뜻이다 (평가 대상 외)."""
@@ -122,6 +136,13 @@ def sediment_severity(degree_code: int) -> float:
         raise HazardShapeError(f"A33_002: {degree_code!r}") from None
 
 
+def tsunami_severity(band: str) -> float:
+    match = _TSUNAMI_DEPTH_RE.match(band.strip())
+    if not match:
+        raise HazardShapeError(f"A40_003: {band!r}")
+    return min(float(match.group(1)) / _TSUNAMI_MAX_DEPTH_M, 1.0)
+
+
 @dataclass(frozen=True)
 class HazardZone:
     geometry: BaseGeometry
@@ -141,6 +162,7 @@ _LAYER_PARSERS: dict[str, tuple[str, object]] = {
     "flood": ("A31a_205", flood_severity),
     "storm_surge": ("A49_003", storm_surge_severity),
     "sediment": ("A33_002", sediment_severity),
+    "tsunami": ("A40_003", tsunami_severity),
 }
 
 
@@ -166,7 +188,7 @@ def decayed_severity(severity: float, distance_m: float) -> float:
     return severity * max(0.0, 1.0 - distance_m / DECAY_M)
 
 
-def _nearest_distance_m(lat: float, lon: float, geometry: BaseGeometry) -> float:
+def nearest_distance_m(lat: float, lon: float, geometry: BaseGeometry) -> float:
     point = Point(lon, lat)
     if geometry.distance(point) == 0:
         return 0.0
@@ -194,6 +216,6 @@ class HazardIndex:
         best = 0.0
         for index in candidates:
             zone = self._zones[index]
-            distance = _nearest_distance_m(lat, lon, zone.geometry)
+            distance = nearest_distance_m(lat, lon, zone.geometry)
             best = max(best, decayed_severity(zone.severity, distance))
         return best

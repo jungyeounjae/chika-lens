@@ -42,6 +42,45 @@ from chika.infrastructure.mlit_hazard_source import MlitHazardPolygonSource
 DEFAULT_HAZARD_RADIUS_M = 300.0
 
 
+def enrich_listing(
+    listing: dict[str, object],
+    hazard_source: MlitHazardPolygonSource,
+    stations: list[Station],
+    ridership: dict[str, float],
+    radius_m: float,
+) -> dict[str, object]:
+    """물건 하나에 재해 요약·정숙도를 채운 dict 를 돌려준다.
+
+    `main()`(배치)와 `lazy_new_construction.py`(구 단위 즉시 크롤링) 양쪽이
+    이 함수를 공유한다 — `MlitApiError`는 여기서 잡지 않고 호출자에게 올려
+    보낸다(배치는 sys.exit, lazy 크롤링은 조용히 실패 후 재시도).
+    """
+    lat_raw, lon_raw = listing.get("lat"), listing.get("lon")
+    if lat_raw is None or lon_raw is None:
+        return {**listing, "hazard_summary": {}, "quietness": None}
+    lat = float(lat_raw)  # type: ignore[arg-type]
+    lon = float(lon_raw)  # type: ignore[arg-type]
+
+    try:
+        polygons = hazard_source.polygons_near(lat, lon, radius_m)
+    except HazardShapeError as exc:
+        print(
+            f"    경고: {listing.get('name', '?')} 재해 조회 중 알 수 없는 "
+            f"값, 이 물건은 재해 결측으로 남긴다: {exc}"
+        )
+        polygons = []
+    hazards = summarize_hazards(polygons)
+    quietness = nearest_quietness(lat, lon, stations, ridership)
+
+    return {
+        **listing,
+        "hazard_summary": {
+            layer: _hazard_to_dict(summary) for layer, summary in hazards.items()
+        },
+        "quietness": _quietness_to_dict(quietness) if quietness else None,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -70,34 +109,10 @@ def main() -> None:
             if index % 5 == 0 or index == len(listings):
                 print(f"  {index}/{len(listings)}건 처리 중")
 
-            lat, lon = listing.get("lat"), listing.get("lon")
-            if lat is None or lon is None:
+            if listing.get("lat") is None or listing.get("lon") is None:
                 skipped_no_coords += 1
-                enriched.append({**listing, "hazard_summary": {}, "quietness": None})
-                continue
-
-            try:
-                polygons = hazard_source.polygons_near(
-                    float(lat), float(lon), args.radius_m
-                )
-            except HazardShapeError as exc:
-                print(
-                    f"    경고: {listing.get('name', '?')} 재해 조회 중 알 수 없는 "
-                    f"값, 이 물건은 재해 결측으로 남긴다: {exc}"
-                )
-                polygons = []
-            hazards = summarize_hazards(polygons)
-            quietness = nearest_quietness(float(lat), float(lon), stations, ridership)
-
             enriched.append(
-                {
-                    **listing,
-                    "hazard_summary": {
-                        layer: _hazard_to_dict(summary)
-                        for layer, summary in hazards.items()
-                    },
-                    "quietness": _quietness_to_dict(quietness) if quietness else None,
-                }
+                enrich_listing(listing, hazard_source, stations, ridership, args.radius_m)
             )
     except (MlitApiError, KeyboardInterrupt) as exc:
         sys.exit(f"중단: {exc}")

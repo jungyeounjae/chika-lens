@@ -20,12 +20,15 @@ def _listing(
     price_max_yen: int | None = 60_000_000,
     hazard_summary: dict[str, HazardLevel] | None = None,
     daily_ridership: float | None = 10_000.0,
+    name: str | None = None,
+    address_raw: str = "",
+    station_name: str = "X",
 ) -> NewConstructionListing:
     return NewConstructionListing(
         suumo_id=suumo_id,
-        name=f"物件{suumo_id}",
+        name=name or f"物件{suumo_id}",
         ward=ward,
-        address_raw="",
+        address_raw=address_raw,
         lat=35.7,
         lon=139.7,
         price_min_yen=price_min_yen,
@@ -37,7 +40,7 @@ def _listing(
         fetched_at="2026-09-14",
         hazard_summary=hazard_summary or {},
         quietness=NewConstructionQuietness(
-            station_id="st_x", station_name="X", distance_m=300.0,
+            station_id="st_x", station_name=station_name, distance_m=300.0,
             daily_ridership=daily_ridership,
         ),
     )
@@ -143,3 +146,68 @@ def test_find_by_id_returns_none_when_not_found() -> None:
 
     assert search.find_by_id("does-not-exist") is None
     assert search.find_by_id("1") is not None
+
+
+def test_filters_by_address_substring_regardless_of_price() -> None:
+    repo = _FakeRepo(
+        [
+            _listing("1", address_raw="練馬区高松６", price_min_yen=None, price_max_yen=None),
+            _listing("2", address_raw="練馬区関町北４", price_min_yen=30_000_000),
+        ]
+    )
+    search = NewConstructionSearch(repo)
+
+    result = search.execute(NewConstructionFilter(address_contains="光が丘"))
+
+    assert [item.suumo_id for item in result] == []
+
+
+def test_address_contains_also_matches_the_nearest_station_name() -> None:
+    """"光が丘" 같은 동네 이름은 공식 주소(町丁目)엔 없고 역명에만 있을 수
+    있다(実測 2026-09-14) — 주소만 보면 놓친다."""
+    repo = _FakeRepo(
+        [
+            _listing("1", address_raw="練馬区高松６", station_name="光が丘"),
+            _listing("2", address_raw="練馬区関町北４", station_name="武蔵関"),
+        ]
+    )
+    search = NewConstructionSearch(repo)
+
+    result = search.execute(NewConstructionFilter(address_contains="光が丘"))
+
+    assert [item.suumo_id for item in result] == ["1"]
+
+
+def test_address_substring_matches_the_intended_listing() -> None:
+    repo = _FakeRepo(
+        [
+            _listing("1", address_raw="練馬区高松６丁目"),
+            _listing("2", address_raw="練馬区関町北４"),
+        ]
+    )
+    search = NewConstructionSearch(repo)
+
+    result = search.execute(NewConstructionFilter(address_contains="高松"))
+
+    assert [item.suumo_id for item in result] == ["1"]
+
+
+def test_find_by_name_prefers_exact_match_over_partial() -> None:
+    repo = _FakeRepo(
+        [
+            _listing("1", name="プレシス光が丘ペイサージュ"),
+            _listing("2", name="プレシス光が丘"),
+        ]
+    )
+    search = NewConstructionSearch(repo)
+
+    result = search.find_by_name("プレシス光が丘")
+
+    assert [item.suumo_id for item in result] == ["2", "1"]
+
+
+def test_find_by_name_returns_empty_list_when_nothing_matches() -> None:
+    repo = _FakeRepo([_listing("1", name="プレシス光が丘")])
+    search = NewConstructionSearch(repo)
+
+    assert search.find_by_name("存在しない物件") == []

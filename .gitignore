@@ -59,13 +59,21 @@ Thumbs.db
 # 30일 캐시 제한이 적용될 가능성도 있다.
 backend/data/metrics.json
 backend/data/korean_shops.json
-# MLIT 취득 데이터. 이용 목적 회신대로 집계값만 쓰고 재배포하지 않는다 (스펙 §3.1.2).
-backend/data/mlit_childcare.json
-backend/data/mlit_prices.json
-backend/data/mlit_hazards.json
-backend/data/mlit_ridership.json
-backend/data/mlit_zoning.json
+# MLIT 취득 데이터(mlit_*.json)는 2026-09-11 이전엔 여기서 제외했었다 — 근거로
+# 든 "이용 목적 회신 서약"이 실제로 없었던 것으로 확인돼(스펙 §3.1.2 정정)
+# 지금은 커밋한다. 실제 라이선스(PDL1.0)는 stations.json과 같아 출처 표기
+# 조건으로 재배포를 허용한다.
+#
+# `.cache/`(타일 원본 응답, 수백MB)는 계속 제외한다 — 이건 라이선스가 아니라
+# 순수 용량 문제다. 재현 가능한 캐시라 커밋할 이유가 없다.
 backend/data/.cache/
+# SUUMO 크롤링 산출물(신축 분양 물건). SUUMO 이용약관 제2조가 콘텐츠 사용을
+# "저작권법이 정하는 개인 사적 이용 범위"로 제한하고, 제3조(7)는 상업 목적
+# 이용을 금지한다(회사 사전 승낙 없이는) — 재배포·공개 저장소 커밋은 그
+# 범위를 넘는다(스펙 §2.3.1). 로컬 전용, 개인 용도로만 둔다.
+backend/data/new_construction.json
+backend/data/new_construction_enriched.json
+backend/data/new_construction_crawled_wards.json
 gcloud-service-key.json
 
 # Node

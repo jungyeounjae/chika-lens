@@ -176,6 +176,7 @@ def zoning_massing(
 def search_new_construction(
     ctx: RunContextWrapper[SessionState],
     ward: str | None = None,
+    address_contains: str | None = None,
     max_price_yen: int | None = None,
     min_price_yen: int | None = None,
     max_hazard_severity: float | None = None,
@@ -190,6 +191,12 @@ def search_new_construction(
     조건을 확정할 필요 없이 바로 호출 가능하다.
 
     `ward`는 반드시 일본어 구 이름(예: "新宿区", "미나토구"가 아니다).
+    `address_contains`는 구보다 좁은 동네 이름 질문에 쓴다(예: "光が丘") —
+    "히카리가오카에 뭐 있어?" 같은 질문은 ward만으론 표현이 안 된다. 주소
+    (공식 町丁目)와 최근접 역명 둘 중 하나라도 포함하면 매치한다 — "히카리
+    가오카" 같은 동네 이름은 공식 주소엔 안 나오고 역명으로만 나타나는
+    경우가 많다. 가격순 정렬·상한 10건과 무관하게 이 조건만으로 걸러지므로
+    가격 미정이거나 비싼 물건도 빠지지 않는다.
     `max_hazard_severity`(0~1, 낮을수록 안전)를 주면 그 값을 넘는 재해
     레이어가 하나라도 있는 물건을 제외한다 — "안전한 곳만"이면 0.5 정도를
     시작값으로 쓴다. `min_daily_ridership`/`max_daily_ridership`는 최근접
@@ -204,6 +211,7 @@ def search_new_construction(
     return actions.act_search_new_construction(
         ctx.context,
         ward=ward,
+        address_contains=address_contains,
         max_price_yen=max_price_yen,
         min_price_yen=min_price_yen,
         max_hazard_severity=max_hazard_severity,
@@ -214,11 +222,26 @@ def search_new_construction(
 
 
 @function_tool
+def lookup_new_construction(ctx: RunContextWrapper[SessionState], name: str) -> dict[str, Any]:
+    """신축 물건 이름으로 suumo_id 를 찾는다.
+
+    사용자가 특정 물건 이름을 대며 물어볼 때(예: "프레시스 히카리가오카
+    어때?") 쓴다. `search_new_construction`은 가격순 정렬 + 상한 10건이라
+    가격 미정·고가 물건은 이름을 대도 결과에서 밀려날 수 있다 — 이 툴은
+    그 정렬·상한과 무관하게 이름 부분일치로 찾는다. 한글 음차는 일본어로
+    바꿔서 넘긴다. 결과의 `suumo_id`로 `explain_new_construction`을 불러
+    자세히 본다.
+    """
+    return actions.act_lookup_new_construction(ctx.context, name)
+
+
+@function_tool
 def explain_new_construction(
     ctx: RunContextWrapper[SessionState], suumo_id: str
 ) -> dict[str, Any]:
     """신축 물건 하나의 전체 정보(가격·면적·인도시기·재해 요약·정숙도)를 낸다.
 
-    `suumo_id`는 `search_new_construction` 결과에 있는 값을 그대로 쓴다.
+    `suumo_id`는 `search_new_construction`/`lookup_new_construction` 결과에
+    있는 값을 그대로 쓴다.
     """
     return actions.act_explain_new_construction(ctx.context, suumo_id)

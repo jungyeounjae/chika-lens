@@ -27,6 +27,7 @@ from chika.interface.agent.actions import (
     act_explain_area,
     act_explain_new_construction,
     act_hazard_polygons,
+    act_lookup_new_construction,
     act_lookup_station,
     act_metric_distribution,
     act_metric_extremes,
@@ -1095,14 +1096,19 @@ def test_zoning_massing_rejects_an_unknown_station() -> None:
 # --- search_new_construction / explain_new_construction ---
 
 
-def _new_construction_listing(suumo_id: str, ward: str = "新宿区") -> NewConstructionListing:
+def _new_construction_listing(
+    suumo_id: str,
+    ward: str = "新宿区",
+    name: str | None = None,
+    address_raw: str = "新宿区下落合１",
+) -> NewConstructionListing:
     from chika.domain.model.new_construction import HazardLevel, NewConstructionQuietness
 
     return NewConstructionListing(
         suumo_id=suumo_id,
-        name=f"物件{suumo_id}",
+        name=name or f"物件{suumo_id}",
         ward=ward,
-        address_raw="新宿区下落合１",
+        address_raw=address_raw,
         lat=35.71574,
         lon=139.699585,
         price_min_yen=98_900_000,
@@ -1172,3 +1178,58 @@ def test_explain_new_construction_reports_unknown_id() -> None:
     result = act_explain_new_construction(session, "does-not-exist")
 
     assert result == {"error": "unknown_listing", "suumo_id": "does-not-exist"}
+
+
+def test_search_new_construction_triggers_the_lazy_crawl_hook_with_the_ward() -> None:
+    session = _state_with_new_construction([])
+    calls: list[str] = []
+    session.ensure_ward_crawled = calls.append
+
+    act_search_new_construction(session, ward="練馬区")
+
+    assert calls == ["練馬区"]
+
+
+def test_search_new_construction_skips_the_lazy_crawl_hook_without_a_ward() -> None:
+    session = _state_with_new_construction([])
+    calls: list[str] = []
+    session.ensure_ward_crawled = calls.append
+
+    act_search_new_construction(session)
+
+    assert calls == []
+
+
+def test_search_new_construction_filters_by_address_contains() -> None:
+    session = _state_with_new_construction(
+        [
+            _new_construction_listing("1", ward="練馬区", address_raw="練馬区高松６"),
+            _new_construction_listing("2", ward="練馬区", address_raw="練馬区関町北４"),
+        ]
+    )
+
+    result = act_search_new_construction(session, ward="練馬区", address_contains="高松")
+
+    assert [item["suumo_id"] for item in result["listings"]] == ["1"]
+
+
+def test_lookup_new_construction_returns_matches_by_name() -> None:
+    session = _state_with_new_construction(
+        [
+            _new_construction_listing("1", name="プレシス光が丘ペイサージュ"),
+            _new_construction_listing("2", name="プレシス光が丘"),
+            _new_construction_listing("3", name="全然違う物件"),
+        ]
+    )
+
+    result = act_lookup_new_construction(session, "プレシス光が丘")
+
+    assert [m["suumo_id"] for m in result["matches"]] == ["2", "1"]
+
+
+def test_lookup_new_construction_returns_empty_matches_for_an_empty_query() -> None:
+    session = _state_with_new_construction([_new_construction_listing("1")])
+
+    result = act_lookup_new_construction(session, "  ")
+
+    assert result == {"query": "  ", "matches": []}

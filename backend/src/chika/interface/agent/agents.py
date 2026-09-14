@@ -15,6 +15,7 @@ from chika.interface.agent.tools import (
     explain_area,
     explain_new_construction,
     hazard_polygons,
+    lookup_new_construction,
     lookup_station,
     metric_distribution,
     metric_extremes,
@@ -42,6 +43,7 @@ def build_agents() -> Agent[SessionState]:
             hazard_polygons,
             zoning_massing,
             search_new_construction,
+            lookup_new_construction,
             explain_new_construction,
         ],
     )

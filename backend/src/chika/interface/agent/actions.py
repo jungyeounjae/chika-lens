@@ -735,6 +735,7 @@ def _new_construction_payload(listing: NewConstructionListing) -> dict[str, Any]
 def act_search_new_construction(
     state: SessionState,
     ward: str | None = None,
+    address_contains: str | None = None,
     max_price_yen: int | None = None,
     min_price_yen: int | None = None,
     max_hazard_severity: float | None = None,
@@ -742,9 +743,13 @@ def act_search_new_construction(
     max_daily_ridership: float | None = None,
     limit: int = 10,
 ) -> dict[str, Any]:
+    if ward is not None:
+        state.ensure_ward_crawled(ward)
+
     capped = max(1, min(limit, MAX_NEW_CONSTRUCTION_LIMIT))
     filter_ = NewConstructionFilter(
         ward=ward,
+        address_contains=address_contains,
         max_price_yen=max_price_yen,
         min_price_yen=min_price_yen,
         max_hazard_severity=max_hazard_severity,
@@ -754,6 +759,32 @@ def act_search_new_construction(
     listings = state.usecases.new_construction.execute(filter_, limit=capped)
     state.last_new_construction = listings
     return {"listings": [_new_construction_payload(listing) for listing in listings]}
+
+
+def act_lookup_new_construction(state: SessionState, name: str) -> dict[str, Any]:
+    """물건명으로 suumo_id 를 찾는다 — `lookup_station`과 같은 패턴.
+
+    `search_new_construction`은 가격순 정렬 + 상한 10건이라, 가격 미정이거나
+    비싼 물건은 특정 이름으로 물어봐도 결과에서 밀려날 수 있다. 이 툴은 그
+    캡·정렬과 무관하게 이름 부분일치로 전부 찾는다.
+    """
+    query = name.strip()
+    if not query:
+        return {"query": name, "matches": []}
+
+    matched = state.usecases.new_construction.find_by_name(query)
+    return {
+        "query": query,
+        "matches": [
+            {
+                "suumo_id": listing.suumo_id,
+                "name": listing.name,
+                "ward": listing.ward,
+                "address": listing.address_raw,
+            }
+            for listing in matched
+        ],
+    }
 
 
 def act_explain_new_construction(state: SessionState, suumo_id: str) -> dict[str, Any]:

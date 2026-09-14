@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import os
+from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 
 from chika.application.usecase.compare_areas import CompareAreas
@@ -20,6 +22,7 @@ from chika.application.usecase.new_construction_search import NewConstructionSea
 from chika.application.usecase.rank_areas import RankAreas
 from chika.application.usecase.ward_price import WardPriceRanking
 from chika.application.usecase.zoning_massing import ZoningMassing
+from chika.etl.lazy_new_construction import ensure_ward_crawled
 from chika.etl.mlit_client import MlitClient
 from chika.infrastructure.fake.repositories import (
     FakeAreaMetricsRepository,
@@ -39,6 +42,16 @@ def _mlit_client() -> MlitClient:
     """3D 원본 Polygon 툴(hazard_polygons/zoning_massing) 전용 — 요청이 실제로
     올 때만 호출되므로, 키가 비어 있어도 세션 구성 자체는 막지 않는다."""
     return MlitClient(os.environ.get("MLIT_API_KEY", ""))
+
+
+def _ward_crawl_hook() -> Callable[[str], None]:
+    """구 단위 lazy 크롤링 훅 — `SessionState.ensure_ward_crawled`의 실제 구현.
+
+    합성 루트(여기)에서만 주입한다 — 테스트가 `SessionState`를 직접 만들 때는
+    기본값(no-op, state.py 참고)을 쓰게 돼 실제 SUUMO/MLIT 네트워크를 타지
+    않는다.
+    """
+    return partial(ensure_ward_crawled, mlit_api_key=os.environ.get("MLIT_API_KEY", ""))
 
 
 def build_demo_session(
@@ -61,7 +74,8 @@ def build_demo_session(
             new_construction=NewConstructionSearch(
                 FileNewConstructionRepository(new_construction_path)
             ),
-        )
+        ),
+        ensure_ward_crawled=_ward_crawl_hook(),
     )
 
 
@@ -119,7 +133,8 @@ def build_real_session(
             new_construction=NewConstructionSearch(
                 FileNewConstructionRepository(new_construction_path)
             ),
-        )
+        ),
+        ensure_ward_crawled=_ward_crawl_hook(),
     )
 
 

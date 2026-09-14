@@ -5,6 +5,11 @@ MLIT API 는 공공데이터라 '현재 마케팅 중인 신축 분양가·모�
 직접 크롤링한다. robots.txt 확인(2026-09-14): `/ms/shinchiku/tokyo/sc_*/`
 계열은 불허 목록에 없다. 요청 간격 2초 이상으로 개인 용도 수준을 지킨다.
 
+**개인 사적 이용 한정** — SUUMO 이용약관 제2조/제3조(7) 때문에 이 산출물
+(`data/new_construction*.json`)은 로컬 전용이다. 공개 저장소에 커밋하지
+않고(`.gitignore`), 재배포하지 않고, 다중 사용자가 접근하는 서비스로
+노출하지 않는다 (스펙 §2.3.1).
+
 사용법:
 
     uv run python -m chika.etl.build_new_construction
@@ -50,7 +55,10 @@ def main() -> None:
 
     wards = _selected_wards(args.wards)
     client = SuumoClient()
-    listings = _crawl_all_wards(client, wards, args.cache_dir, args.refresh)
+    try:
+        listings = _crawl_all_wards(client, wards, args.cache_dir, args.refresh)
+    except SuumoFetchError as exc:
+        sys.exit(f"중단: {exc}")
     print(f"물건 {len(listings)}건 수집 (구 {len(wards)}개)")
 
     geocode_cache = _load_geocode_cache(args.geocode_cache, args.refresh)
@@ -114,10 +122,10 @@ def _crawl_ward(
 def _fetch_cached(client: SuumoClient, url: str, cache_path: Path, refresh: bool) -> str:
     if not refresh and cache_path.exists():
         return cache_path.read_text(encoding="utf-8")
-    try:
-        html = client.fetch_html(url)
-    except SuumoFetchError as exc:
-        sys.exit(f"중단: {exc}")
+    # SuumoFetchError 는 여기서 잡지 않고 호출자에게 그대로 올려보낸다 — 이
+    # 함수는 CLI(main())뿐 아니라 lazy_new_construction.py 에서도 재사용되고,
+    # 후자는 sys.exit 로 프로세스를 죽이면 안 되는 채팅 요청 경로다.
+    html = client.fetch_html(url)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_text(html, encoding="utf-8")
     return html

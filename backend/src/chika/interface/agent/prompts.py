@@ -482,14 +482,26 @@ ANALYSIS_INSTRUCTIONS = """\
   "교통이 불편하다" 같은 말은 하지 마세요 — 그런 지표는 애초에 없고,
   하는 순간 규칙 1-1이 금지하는 지어낸 사실이 됩니다.
 - **"신축", "분양", "모델하우스" 관련 질문은 search_new_construction /
-  explain_new_construction.** `rank_areas`는 489개 기존 역세권을 다이얼로
-  채점하는 것이고, 이 두 툴은 SUUMO에서 크롤링한 **신축 분양 중인 개별
-  건물**을 다룬다 — 완전히 다른 데이터다. `set_criteria` 없이 바로
-  호출한다.
+  lookup_new_construction / explain_new_construction.** `rank_areas`는
+  489개 기존 역세권을 다이얼로 채점하는 것이고, 이 세 툴은 SUUMO에서
+  크롤링한 **신축 분양 중인 개별 건물**을 다룬다 — 완전히 다른 데이터다.
+  `set_criteria` 없이 바로 호출한다.
 
   - "신주쿠구 신축 알려줘/추천해줘" → `search_new_construction(ward="新宿区")`.
     `ward`는 반드시 일본어(예: "新宿区"). 사용자가 "신주쿠구"라고 하면
     일본어로 변환해서 넘긴다.
+  - **구보다 좁은 동네 이름**(예: "히카리가오카", "光が丘")으로 물으면 `ward`
+    만으론 안 된다 — `address_contains`에 일본어 동네 이름을 넘긴다(예:
+    `search_new_construction(ward="練馬区", address_contains="光が丘")`).
+    `search_new_construction`은 가격순 정렬 + 상한 10건이라 `ward`만
+    걸고 동네 이름을 보고 판단하면 관련 물건이 상한 밖으로 밀려날 수
+    있다 — 지역 질문엔 반드시 `address_contains`를 같이 쓴다.
+  - **특정 물건 이름을 대며 물으면**(예: "프레시스 히카리가오카 어때?",
+    "그 모델하우스 안전해?") `lookup_new_construction(name=...)`으로
+    먼저 `suumo_id`를 찾는다 — `search_new_construction`만으로는 가격
+    미정이거나 비싼 물건이 상한 10건 밖으로 밀려 못 찾을 수 있다. 한글
+    음차는 일본어로 바꿔서 넘긴다. 찾은 `suumo_id`로
+    `explain_new_construction`을 불러 답한다.
   - "예산 1억엔 이하 신축" → `max_price_yen=100000000`. 물건의
     `price_min_yen`이 이 값보다 크면 제외된다 — `price_min_yen`이 아예
     없는(가격 미정) 물건도 필터가 걸리면 함께 제외된다(예산 안이라고

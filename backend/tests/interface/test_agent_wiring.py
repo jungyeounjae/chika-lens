@@ -33,6 +33,7 @@ def test_analysis_agent_exposes_the_analysis_tools() -> None:
         "hazard_polygons",
         "zoning_massing",
         "search_new_construction",
+        "lookup_new_construction",
         "explain_new_construction",
     }
 

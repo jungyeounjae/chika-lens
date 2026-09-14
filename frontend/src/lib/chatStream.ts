@@ -67,6 +67,8 @@ function parseFrame(frame: string): ChatEvent | null {
       return { kind: "text", delta: String(payload.delta ?? "") };
     case "tool":
       return { kind: "tool", tool: String(payload.tool ?? ""), result: payload.result };
+    case "status":
+      return { kind: "status", text: String(payload.text ?? "") };
     case "done":
       return { kind: "done", remainingToday: Number(payload.remaining_today ?? 0) };
     case "error":

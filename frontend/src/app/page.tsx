@@ -7,11 +7,14 @@ import { ChatMarkdown } from "@/components/ChatMarkdown";
 import { streamChat } from "@/lib/chatStream";
 import type {
   ExplainedArea,
+  HazardPolygonResult,
   MapPin,
   MetricDistribution,
   NearbyStation,
   RankedArea,
+  ZoningMassingResult,
 } from "@/lib/types";
+import type { PolygonView } from "@/components/AreaMap";
 
 // maplibre 는 window 를 참조하므로 서버에서 렌더할 수 없다.
 const AreaMap = dynamic(() => import("@/components/AreaMap").then((m) => m.AreaMap), {
@@ -22,6 +25,9 @@ const AreaMap = dynamic(() => import("@/components/AreaMap").then((m) => m.AreaM
 type Turn = {
   role: "user" | "assistant";
   text: string;
+  // 툴이 실행되는 동안의 실시간 상태("역세권 순위 계산하는 중...").
+  // text 가 채워지기 시작하면 더는 안 쓰인다 — 렌더 쪽에서 text 를 우선한다.
+  status?: string;
   // 랭킹은 그 턴이 만든 것이지 화면 전체가 공유하는 값이 아니다 — 턴에
   // 직접 묶지 않으면 다음 턴 아래로 떠밀려 내려간다.
   areas?: RankedArea[];
@@ -42,6 +48,10 @@ export default function Home() {
   // metric_distribution 결과. 있는 동안은 지도가 순위 핀 대신 percentile
   // 색점을 그린다 (AreaMap 참고).
   const [distribution, setDistribution] = useState<MetricDistribution | null>(null);
+  // hazard_polygons/zoning_massing 결과 — 원본 MLIT Polygon 3D 뷰.
+  const [polygonView, setPolygonView] = useState<PolygonView | null>(null);
+  // 돔+스캐닝 링 강조 역 — explain_area·rank_areas·hazard/zoning 포커스 시
+  const [highlightStation, setHighlightStation] = useState<{ lat: number; lon: number; radiusM?: number } | null>(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +82,15 @@ export default function Home() {
               setNumbered(true);
               setNearby([]);
               setDistribution(null);
+              setPolygonView(null);
+              // 1위 역에 돔+링 강조 표시
+              const top = ranked.areas[0];
+              if (top)
+                setHighlightStation((prev) =>
+                  prev?.lat === top.lat && prev?.lon === top.lon && prev?.radiusM === 500
+                    ? prev
+                    : { lat: top.lat, lon: top.lon, radiusM: 500 },
+                );
               // 랭킹은 이 턴의 응답에 묶는다 — 전역에 두면 다음 턴이 생길 때
               // 화면 맨 아래로 떠밀려 방금 물은 것과 무관해 보인다.
               setTurns((prev) => {
@@ -82,18 +101,56 @@ export default function Home() {
               });
             }
             const single = event.result as Partial<ExplainedArea> | undefined;
-            if (single?.station_id && typeof single.lat === "number") {
+            // hazard_polygons/zoning_massing 결과도 station_id+lat 모양이라
+            // event.tool 로 gating 하지 않으면 오탐한다(실측) — explain_area만.
+            if (event.tool === "explain_area" && single?.station_id && typeof single.lat === "number") {
               setPins([single as ExplainedArea]);
               setNumbered(false);
               setNearby(single.nearby ?? []);
               setDistribution(null);
+              setPolygonView(null);
+              setHighlightStation((prev) =>
+                prev?.lat === single.lat && prev?.lon === single.lon && prev?.radiusM === 500
+                  ? prev
+                  : { lat: single.lat!, lon: single.lon!, radiusM: 500 },
+              );
             }
             const dist = event.result as Partial<MetricDistribution> | undefined;
             if (event.tool === "metric_distribution" && Array.isArray(dist?.points)) {
               // 분포 모드는 순위/단일 조회 핀과 동시에 뜨면 색의 의미가
               // 헷갈린다 — AreaMap이 distribution 이 있으면 그것만 그린다.
               setDistribution(dist as MetricDistribution);
+              setPolygonView(null);
+              // 전체 분포를 보는 모드 — 단일 강조 없앤다
+              setHighlightStation(null);
             }
+            if (event.tool === "hazard_polygons" && Array.isArray((event.result as { polygons?: unknown })?.polygons)) {
+              const hazard = event.result as HazardPolygonResult;
+              setDistribution(null);
+              setPolygonView({ kind: "hazard", result: hazard });
+              setHighlightStation((prev) =>
+                prev?.lat === hazard.lat && prev?.lon === hazard.lon && prev?.radiusM === hazard.radius_m
+                  ? prev
+                  : { lat: hazard.lat, lon: hazard.lon, radiusM: hazard.radius_m },
+              );
+            }
+            if (event.tool === "zoning_massing" && Array.isArray((event.result as { polygons?: unknown })?.polygons)) {
+              const zoning = event.result as ZoningMassingResult;
+              setDistribution(null);
+              setPolygonView({ kind: "zoning", result: zoning });
+              setHighlightStation((prev) =>
+                prev?.lat === zoning.lat && prev?.lon === zoning.lon && prev?.radiusM === zoning.radius_m
+                  ? prev
+                  : { lat: zoning.lat, lon: zoning.lon, radiusM: zoning.radius_m },
+              );
+            }
+          } else if (event.kind === "status") {
+            setTurns((prev) => {
+              const next = [...prev];
+              const target = next[assistantIndex];
+              if (target) next[assistantIndex] = { ...target, status: event.text };
+              return next;
+            });
           } else if (event.kind === "text") {
             setTurns((prev) => {
               const next = [...prev];
@@ -126,8 +183,22 @@ export default function Home() {
           numbered={numbered}
           nearby={nearby}
           distribution={distribution?.points}
+          distributionMetric={distribution?.metric}
+          polygonView={polygonView}
+          highlightStation={highlightStation}
         />
-        {distribution && (
+        {polygonView && (
+          <div className="absolute bottom-3 left-3 rounded-lg border border-neutral-200 bg-white/95 px-3 py-2 text-xs shadow dark:border-neutral-700 dark:bg-neutral-900/95">
+            <p className="font-medium">
+              {polygonView.kind === "hazard" ? "재해위험 3D (원본 구역)" : "용도지역 3D (원본 구역)"}
+            </p>
+            {polygonView.kind === "zoning" && (
+              <p className="mt-0.5 text-neutral-500">높이는 실제 건축 높이 제한이 아니라 시각적 근사치입니다.</p>
+            )}
+            <p className="mt-1 text-[10px] text-neutral-500">{polygonView.result.attribution}</p>
+          </div>
+        )}
+        {!polygonView && distribution && (
           <div className="absolute bottom-3 left-3 rounded-lg border border-neutral-200 bg-white/95 px-3 py-2 text-xs shadow dark:border-neutral-700 dark:bg-neutral-900/95">
             <p className="font-medium">
               {distribution.label}
@@ -169,7 +240,8 @@ export default function Home() {
           )}
 
           {turns.map((turn, index) => {
-            const placeholder = busy && index === turns.length - 1 ? "…" : "";
+            const placeholder =
+              busy && index === turns.length - 1 ? (turn.status ?? "…") : "";
             return (
               <div key={index} className={turn.role === "user" ? "text-right" : ""}>
                 {/* 사용자 입력은 평문으로 둔다 — 마크다운으로 해석할 이유가 없고,
@@ -188,7 +260,9 @@ export default function Home() {
                     )}
                   </>
                 ) : (
-                  <div className="text-sm leading-relaxed">{placeholder}</div>
+                  <div className="text-sm leading-relaxed text-neutral-500 dark:text-neutral-400">
+                    {turn.status ? <span className="animate-pulse">{placeholder}</span> : placeholder}
+                  </div>
                 )}
               </div>
             );

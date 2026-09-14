@@ -76,10 +76,12 @@ export type MapPin = {
 
 /** `metric_distribution` 결과 — 한 지표를 역 단위로 지도에 색칠할 재료.
  *
- * MLIT 원본 폴리곤(재해위험 등)은 지도에 그릴 수 없다(스펙 §3.1.2) — 이건
- * 그 대신 우리가 정규화한 역 단위 percentile 이다. `percentile` 은 항상
- * "높을수록 좋다/안전하다"로 통일돼 있다 — raw_value 의 방향과 반대인
- * 지표(시세·재해위험·감점 상권)가 있으니 색은 반드시 percentile로 매긴다.
+ * MLIT 원본 폴리곤(재해위험 등) 자체는 `hazard_polygons`/`zoning_massing`이
+ * 따로 낸다(스펙 §3.1.2 정정, 2026-09-11 — PDL1.0이 출처 표기 조건으로
+ * 허용한다) — 이 타입은 그 대신 우리가 정규화한 역 단위 percentile 이다.
+ * `percentile` 은 항상 "높을수록 좋다/안전하다"로 통일돼 있다 — raw_value 의
+ * 방향과 반대인 지표(시세·재해위험·감점 상권)가 있으니 색은 반드시
+ * percentile로 매긴다.
  */
 export type DistributionPoint = {
   station_id: string;
@@ -101,8 +103,63 @@ export type MetricDistribution = {
   points: DistributionPoint[];
 };
 
+/** GeoJSON 좌표 — 서버가 MLIT 응답을 그대로 넘긴다(WGS84, [lon, lat]). */
+export type GeoJsonGeometry =
+  | { type: "Polygon"; coordinates: number[][][] }
+  | { type: "MultiPolygon"; coordinates: number[][][][] };
+
+/** `hazard_polygons` 결과 하나 — 홍수·토사재해·액상화·해일·쓰나미 5개 레이어의
+ * 원본 Polygon.
+ *
+ * `metric_distribution`과 달리 MLIT 원본 구역 경계 그대로다(스펙 §3.1.2
+ * 정정, 2026-09-11 — PDL1.0이 출처 표기 조건으로 허용). `label`은 실제
+ * 침수深 구간("0.5m~3.0m") · Yellow/Red 존 · 액상화 등급 등이지 백분위가
+ * 아니다.
+ */
+export type HazardPolygon = {
+  layer: "flood" | "sediment" | "liquefaction" | "storm_surge" | "tsunami";
+  geometry: GeoJsonGeometry;
+  severity: number;
+  label: string;
+};
+
+export type HazardPolygonResult = {
+  station_id: string;
+  name_ja: string;
+  ward: string;
+  lat: number;
+  lon: number;
+  radius_m: number;
+  attribution: string;
+  polygons: HazardPolygon[];
+};
+
+/** `zoning_massing` 결과 하나 — 용도지역 원본 Polygon.
+ *
+ * `height_m`은 실제 법정 높이 제한이 아니라 저층/고밀 대비를 보여주는
+ * 일러스트용 근사치다(backend `zoning_massing.py` 참고).
+ */
+export type ZoningPolygon = {
+  geometry: GeoJsonGeometry;
+  youto_id: number;
+  use_area_ja: string;
+  height_m: number;
+};
+
+export type ZoningMassingResult = {
+  station_id: string;
+  name_ja: string;
+  ward: string;
+  lat: number;
+  lon: number;
+  radius_m: number;
+  attribution: string;
+  polygons: ZoningPolygon[];
+};
+
 export type ChatEvent =
   | { kind: "text"; delta: string }
   | { kind: "tool"; tool: string; result: unknown }
+  | { kind: "status"; text: string }
   | { kind: "done"; remainingToday: number }
   | { kind: "error"; code: string; message: string };

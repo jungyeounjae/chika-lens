@@ -6,6 +6,7 @@ from chika.application.usecase.hazard_polygons import HazardPolygons
 from chika.application.usecase.metric_distribution import MetricDistribution
 from chika.application.usecase.metric_extremes import MetricExtremes
 from chika.application.usecase.new_construction_search import NewConstructionSearch
+from chika.application.usecase.park_polygons import ParkPolygons
 from chika.application.usecase.rank_areas import RankAreas
 from chika.application.usecase.school_facilities import SchoolFacilities
 from chika.application.usecase.ward_price import WardPriceRanking
@@ -14,10 +15,11 @@ from chika.domain.model.criteria import Household
 from chika.domain.model.facility import SchoolFacility
 from chika.domain.model.metrics import MetricKey, RawMetrics
 from chika.domain.model.new_construction import NewConstructionListing
-from chika.domain.model.polygon import HazardPolygon, ZoningPolygon
+from chika.domain.model.polygon import HazardPolygon, ParkPolygon, ZoningPolygon
 from chika.domain.model.station import Station
 from chika.domain.model.weights import Dial
 from chika.etl.mlit_client import MlitApiError
+from chika.etl.overpass_client import OverpassFetchError
 from chika.infrastructure.fake.repositories import (
     FakeAreaMetricsRepository,
     FakeCommuteRepository,
@@ -33,6 +35,7 @@ from chika.interface.agent.actions import (
     act_lookup_station,
     act_metric_distribution,
     act_metric_extremes,
+    act_park_polygons,
     act_rank_areas,
     act_school_facilities,
     act_search_new_construction,
@@ -67,6 +70,15 @@ class _FakeSchoolFacilitySource:
     def facilities_near(
         self, lat: float, lon: float, radius_m: float
     ) -> list[SchoolFacility]:
+        return []
+
+
+class _FakeParkPolygonSource:
+    """`ParkPolygonSource` 포트의 테스트 더블. 실제 Overpass 호출이 없다."""
+
+    def polygons_near(
+        self, lat: float, lon: float, radius_m: float
+    ) -> list[ParkPolygon]:
         return []
 
 
@@ -141,6 +153,7 @@ def _deterministic_state(
             hazard_polygons=HazardPolygons(areas, _FakeHazardPolygonSource()),
             zoning_massing=ZoningMassing(areas, _FakeZoningPolygonSource()),
             school_facilities=SchoolFacilities(_FakeSchoolFacilitySource()),
+            park_polygons=ParkPolygons(_FakeParkPolygonSource()),
             new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
         )
     )
@@ -161,6 +174,7 @@ def state() -> SessionState:
             hazard_polygons=HazardPolygons(areas, _FakeHazardPolygonSource()),
             zoning_massing=ZoningMassing(areas, _FakeZoningPolygonSource()),
             school_facilities=SchoolFacilities(_FakeSchoolFacilitySource()),
+            park_polygons=ParkPolygons(_FakeParkPolygonSource()),
             new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
         )
     )
@@ -1047,6 +1061,7 @@ def _state_with_sources(hazard_source, zoning_source) -> SessionState:  # noqa: 
             hazard_polygons=HazardPolygons(areas, hazard_source),
             zoning_massing=ZoningMassing(areas, zoning_source),
             school_facilities=SchoolFacilities(_FakeSchoolFacilitySource()),
+            park_polygons=ParkPolygons(_FakeParkPolygonSource()),
             new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
         )
     )
@@ -1154,6 +1169,7 @@ def _state_with_new_construction(listings: list[NewConstructionListing]) -> Sess
             hazard_polygons=HazardPolygons(areas, _FakeHazardPolygonSource()),
             zoning_massing=ZoningMassing(areas, _FakeZoningPolygonSource()),
             school_facilities=SchoolFacilities(_FakeSchoolFacilitySource()),
+            park_polygons=ParkPolygons(_FakeParkPolygonSource()),
             new_construction=NewConstructionSearch(_FakeNewConstructionRepo(listings)),
         )
     )
@@ -1288,6 +1304,7 @@ def _state_with_school_source(source) -> SessionState:  # noqa: ANN001
             zoning_massing=ZoningMassing(areas, _FakeZoningPolygonSource()),
             new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
             school_facilities=SchoolFacilities(source),
+            park_polygons=ParkPolygons(_FakeParkPolygonSource()),
         )
     )
 
@@ -1387,3 +1404,92 @@ def test_school_facilities_caps_the_result_to_twenty() -> None:
     # 거리 오름차순 확인
     distances = [f["distance_m"] for f in result["facilities"]]
     assert distances == sorted(distances)
+
+
+# --- park_polygons ---
+
+
+class _FakeParkPolygonSourceWith:
+    def __init__(self, polygons: list[ParkPolygon]) -> None:
+        self._polygons = polygons
+
+    def polygons_near(
+        self, lat: float, lon: float, radius_m: float
+    ) -> list[ParkPolygon]:
+        return self._polygons
+
+
+class _RaisingParkPolygonSource:
+    """Overpass 서버 장애 시나리오 — `overpass_unavailable` 오류 처리를 검증한다."""
+
+    def polygons_near(
+        self, lat: float, lon: float, radius_m: float
+    ) -> list[ParkPolygon]:
+        raise OverpassFetchError("HTTP 503")
+
+
+def _state_with_park_source(source) -> SessionState:  # noqa: ANN001
+    stations = [_station("a")]
+    areas = FakeAreaMetricsRepository(stations, [_raw("a")])
+    return SessionState(
+        usecases=UseCases(
+            rank=RankAreas(areas, FakeCommuteRepository({}), FakePriceRepository({})),
+            explain=ExplainArea(areas, FakePriceRepository({})),
+            compare=CompareAreas(areas),
+            distribution=MetricDistribution(areas),
+            ward_price=WardPriceRanking(areas),
+            extremes=MetricExtremes(areas),
+            hazard_polygons=HazardPolygons(areas, _FakeHazardPolygonSource()),
+            zoning_massing=ZoningMassing(areas, _FakeZoningPolygonSource()),
+            new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
+            school_facilities=SchoolFacilities(_FakeSchoolFacilitySource()),
+            park_polygons=ParkPolygons(source),
+        )
+    )
+
+
+def test_park_polygons_returns_polygons_and_attribution() -> None:
+    polygon = ParkPolygon(
+        geometry={"type": "Polygon", "coordinates": [[[139.6, 35.76]]]}, name="北原公園"
+    )
+    session = _state_with_park_source(_FakeParkPolygonSourceWith([polygon]))
+
+    result = act_park_polygons(session, lat=35.76, lon=139.61)
+
+    assert result["polygons"] == [{"geometry": polygon.geometry, "name": "北原公園"}]
+    assert result["attribution"] == "© OpenStreetMap contributors"
+
+
+def test_park_polygons_returns_an_empty_list_when_none_are_nearby() -> None:
+    session = _state_with_park_source(_FakeParkPolygonSourceWith([]))
+
+    result = act_park_polygons(session, lat=35.76, lon=139.61)
+
+    assert result["polygons"] == []
+
+
+def test_park_polygons_clamps_the_radius_to_the_maximum() -> None:
+    class _RecordingSource:
+        def __init__(self) -> None:
+            self.calls: list[tuple[float, float, float]] = []
+
+        def polygons_near(
+            self, lat: float, lon: float, radius_m: float
+        ) -> list[ParkPolygon]:
+            self.calls.append((lat, lon, radius_m))
+            return []
+
+    source = _RecordingSource()
+    session = _state_with_park_source(source)
+
+    act_park_polygons(session, lat=35.76, lon=139.61, radius_m=999_999.0)
+
+    assert source.calls == [(35.76, 139.61, 1500.0)]
+
+
+def test_park_polygons_reports_overpass_unavailable_on_error() -> None:
+    session = _state_with_park_source(_RaisingParkPolygonSource())
+
+    result = act_park_polygons(session, lat=35.76, lon=139.61)
+
+    assert result == {"error": "overpass_unavailable", "detail": "HTTP 503"}

@@ -262,3 +262,18 @@ def school_facilities(
     한국어로 지어내 번역하지 않는다(자연스럽게 풀어서 설명하는 것은 괜찮다).
     """
     return actions.act_school_facilities(ctx.context, lat=lat, lon=lon, radius_m=radius_m)
+
+
+@function_tool
+def park_polygons(
+    ctx: RunContextWrapper[SessionState], lat: float, lon: float, radius_m: float = 800.0
+) -> dict[str, Any]:
+    """좌표 주변의 공원 원본 구역 경계(Polygon)를 낸다 — 3D 녹지 시각화 재료.
+
+    "공원 있어?", "녹지 가까워?" 같은 질문에 쓴다. `lat`/`lon`은
+    `rank_areas`/`search_new_construction`/`school_facilities` 결과에 이미
+    있는 좌표를 그대로 넘긴다. 결과 0건은 "이 반경 안에 공원 없음"이지
+    오류가 아니다. `name`이 `null`이면 OSM에 이름이 등록 안 된 공원이다 —
+    "이름 미상의 공원"이라고 답하되 이름을 지어내지 않는다.
+    """
+    return actions.act_park_polygons(ctx.context, lat=lat, lon=lon, radius_m=radius_m)

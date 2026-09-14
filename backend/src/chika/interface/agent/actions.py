@@ -34,6 +34,7 @@ from chika.domain.model.weights import DIAL_LABELS_KO, Dial, DialSettings, Weigh
 from chika.domain.service.dials import DIAL_TO_METRICS, expand_dials
 from chika.domain.service.personas import seed_dials
 from chika.etl.mlit_client import MlitApiError
+from chika.etl.overpass_client import OverpassFetchError
 from chika.interface.agent.state import SessionState
 
 #: 구 랭킹에서 한 번에 낼 상한. 23구뿐이라 크게 잡을 이유가 없다.
@@ -609,6 +610,9 @@ def act_metric_extremes(
 #: 출처 표기 — PDL1.0이 요구하는 유일한 조건이다(스펙 §3.1.2 정정).
 MLIT_ATTRIBUTION = "出典：国土交通省 不動産情報ライブラリ"
 
+OSM_ATTRIBUTION = "© OpenStreetMap contributors"
+_MAX_PARK_RADIUS_M = 1500.0
+
 #: 반경 상한. 값을 무한정 키우면 타일 수가 폭증해 요청 하나가 배치처럼
 #: 느려진다 — 이 두 툴은 "역 하나 주변"을 보는 용도지 배치가 아니다.
 _MAX_POLYGON_RADIUS_M = 2_000.0
@@ -834,4 +838,26 @@ def act_school_facilities(
             }
             for f in capped
         ],
+    }
+
+
+def act_park_polygons(
+    state: SessionState, lat: float, lon: float, radius_m: float = 800.0
+) -> dict[str, Any]:
+    """좌표 하나 주변의 공원 원본 Polygon — 3D 압출 시각화 재료.
+
+    hazard_polygons 와 같은 이유로 요청마다 Overpass 를 실시간 호출한다.
+    """
+    radius = max(1.0, min(radius_m, _MAX_PARK_RADIUS_M))
+    try:
+        polygons = state.usecases.park_polygons.execute(lat, lon, radius_m=radius)
+    except OverpassFetchError as exc:
+        return {"error": "overpass_unavailable", "detail": str(exc)}
+
+    return {
+        "lat": lat,
+        "lon": lon,
+        "radius_m": radius,
+        "attribution": OSM_ATTRIBUTION,
+        "polygons": [{"geometry": p.geometry, "name": p.name} for p in polygons],
     }

@@ -487,6 +487,12 @@ ANALYSIS_INSTRUCTIONS = """\
   결과 0건은 "이 반경 안에 학교 없음"이지 오류가 아니다 — 그렇게 답한다.
   `kind`는 원문(일본어) 그대로 나오니 자연스럽게 풀어서 설명한다(예:
   "小学校" → "초등학교", "義務教育学校" → "초중일관교").
+- **"공원 있어?", "녹지 가까워?" 같은 질문은 park_polygons.** `lat`/`lon`은
+  방금 조회한 역이나 신축 물건의 좌표를 그대로 쓴다. 결과 0건은 "이 반경
+  안에 공원 없음"이지 오류가 아니다. `name`이 `null`이면 OSM에 이름이
+  등록 안 된 공원이다 — "이름 미상의 공원"이라고 답하되 이름을 지어내지
+  않는다. 답변 끝에 출처(`attribution`, "© OpenStreetMap contributors")를
+  한 줄로 밝힌다.
 - **"신축", "분양", "모델하우스" 관련 질문은 search_new_construction /
   lookup_new_construction / explain_new_construction.** `rank_areas`는
   489개 기존 역세권을 다이얼로 채점하는 것이고, 이 세 툴은 SUUMO에서

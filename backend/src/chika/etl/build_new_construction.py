@@ -28,6 +28,10 @@ from chika.etl.suumo_new_construction import (
 )
 from chika.etl.suumo_wards import TOKYO_23_WARDS
 
+# station.py 의 TOKYO_BBOX 와 동일한 범위를 미러링한다 — domain 계층을 etl 에서
+# import 하지 않는다는 아키텍처 방침 때문에 여기서 별도로 정의한다.
+_TOKYO_BBOX = (35.50, 35.85, 139.55, 139.95)  # lat_min, lat_max, lon_min, lon_max
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -49,7 +53,7 @@ def main() -> None:
     listings = _crawl_all_wards(client, wards, args.cache_dir, args.refresh)
     print(f"물건 {len(listings)}건 수집 (구 {len(wards)}개)")
 
-    geocode_cache = _load_geocode_cache(args.geocode_cache)
+    geocode_cache = _load_geocode_cache(args.geocode_cache, args.refresh)
     geocoder = GsiGeocoder()
     geocoded = _geocode_all(listings, geocoder, geocode_cache)
     args.geocode_cache.parent.mkdir(parents=True, exist_ok=True)
@@ -119,11 +123,17 @@ def _fetch_cached(client: SuumoClient, url: str, cache_path: Path, refresh: bool
     return html
 
 
-def _load_geocode_cache(path: Path) -> dict[str, list[float] | None]:
-    if not path.exists():
+def _load_geocode_cache(path: Path, refresh: bool = False) -> dict[str, list[float] | None]:
+    if refresh or not path.exists():
         return {}
     loaded: dict[str, list[float] | None] = json.loads(path.read_text(encoding="utf-8"))
     return loaded
+
+
+def _in_tokyo_bbox(coords: tuple[float, float]) -> bool:
+    lat, lon = coords
+    lat_min, lat_max, lon_min, lon_max = _TOKYO_BBOX
+    return lat_min <= lat <= lat_max and lon_min <= lon <= lon_max
 
 
 def _geocode_all(
@@ -135,11 +145,21 @@ def _geocode_all(
     for listing in listings:
         key = f"{listing.ward}{listing.address_raw}"
         if key not in cache:
-            try:
-                coords = geocoder.geocode(f"東京都{listing.address_raw}")
-            except GeocodeFetchError as exc:
-                print(f"    지오코딩 실패, 결측으로 남긴다: {key} ({exc})")
-                coords = None
+            address = (
+                listing.address_raw
+                if listing.address_raw.startswith("東京都")
+                else f"東京都{listing.address_raw}"
+            )
+            coords: tuple[float, float] | None = None
+            if address.strip() != "東京都":
+                try:
+                    coords = geocoder.geocode(address)
+                except GeocodeFetchError as exc:
+                    print(f"    지오코딩 실패, 결측으로 남긴다: {key} ({exc})")
+                    coords = None
+                if coords is not None and not _in_tokyo_bbox(coords):
+                    print(f"    도쿄 범위 밖 좌표, 결측으로 남긴다: {key} ({coords})")
+                    coords = None
             cache[key] = list(coords) if coords else None
         cached_coords = cache[key]
         lat, lon = (cached_coords[0], cached_coords[1]) if cached_coords else (None, None)

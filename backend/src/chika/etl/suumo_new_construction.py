@@ -41,7 +41,7 @@ class NewConstructionListing:
 
 _YEN_PATTERN = re.compile(r"(?:(\d+)億)?(?:(\d+)万)?円")
 _AREA_PATTERN = re.compile(r"([\d.]+)m")
-_PAGE_PATTERN = re.compile(r"\?page=(\d+)")
+_PAGE_PATTERN = re.compile(r"[?&]page=(\d+)")
 _ID_PATTERN = re.compile(r"nc_(\d+)")
 
 

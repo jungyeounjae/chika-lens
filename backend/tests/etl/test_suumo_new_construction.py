@@ -125,6 +125,14 @@ def test_a_single_page_ward_has_no_pagination_links() -> None:
     assert max_page_number("<div>물건 23건, 페이지네이션 없음</div>") == 1
 
 
+def test_max_page_number_matches_page_after_other_query_params() -> None:
+    """실제 구 목록 페이지네이션은 `?cn=...&page=N` 형태로 다른 파라미터 뒤에 온다."""
+    html = (
+        '<a href="/ms/shinchiku/tokyo/sc_chiyoda/?cn=9999999&page=3">3</a>'
+    )
+    assert max_page_number(html) == 3
+
+
 def test_parsing_a_listing_with_a_price_range() -> None:
     listings = parse_listing_page(LISTING_WITH_PRICE, ward="新宿区")
     assert len(listings) == 1

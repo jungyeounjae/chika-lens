@@ -12,6 +12,7 @@ import type {
   MetricDistribution,
   NearbyStation,
   RankedArea,
+  SchoolFacilitiesResult,
   ZoningMassingResult,
 } from "@/lib/types";
 import type { PolygonView } from "@/components/AreaMap";
@@ -50,6 +51,8 @@ export default function Home() {
   const [distribution, setDistribution] = useState<MetricDistribution | null>(null);
   // hazard_polygons/zoning_massing 결과 — 원본 MLIT Polygon 3D 뷰.
   const [polygonView, setPolygonView] = useState<PolygonView | null>(null);
+  // school_facilities 결과 — 좌표 주변 학교/보육시설 3D 마커.
+  const [facilities, setFacilities] = useState<SchoolFacilitiesResult | null>(null);
   // 돔+스캐닝 링 강조 역 — explain_area·rank_areas·hazard/zoning 포커스 시
   const [highlightStation, setHighlightStation] = useState<{ lat: number; lon: number; radiusM?: number } | null>(null);
   const [input, setInput] = useState("");
@@ -83,6 +86,7 @@ export default function Home() {
               setNearby([]);
               setDistribution(null);
               setPolygonView(null);
+              setFacilities(null);
               // 1위 역에 돔+링 강조 표시
               const top = ranked.areas[0];
               if (top)
@@ -109,6 +113,7 @@ export default function Home() {
               setNearby(single.nearby ?? []);
               setDistribution(null);
               setPolygonView(null);
+              setFacilities(null);
               setHighlightStation((prev) =>
                 prev?.lat === single.lat && prev?.lon === single.lon && prev?.radiusM === 500
                   ? prev
@@ -121,6 +126,7 @@ export default function Home() {
               // 헷갈린다 — AreaMap이 distribution 이 있으면 그것만 그린다.
               setDistribution(dist as MetricDistribution);
               setPolygonView(null);
+              setFacilities(null);
               // 전체 분포를 보는 모드 — 단일 강조 없앤다
               setHighlightStation(null);
             }
@@ -128,6 +134,7 @@ export default function Home() {
               const hazard = event.result as HazardPolygonResult;
               setDistribution(null);
               setPolygonView({ kind: "hazard", result: hazard });
+              setFacilities(null);
               setHighlightStation((prev) =>
                 prev?.lat === hazard.lat && prev?.lon === hazard.lon && prev?.radiusM === hazard.radius_m
                   ? prev
@@ -138,10 +145,22 @@ export default function Home() {
               const zoning = event.result as ZoningMassingResult;
               setDistribution(null);
               setPolygonView({ kind: "zoning", result: zoning });
+              setFacilities(null);
               setHighlightStation((prev) =>
                 prev?.lat === zoning.lat && prev?.lon === zoning.lon && prev?.radiusM === zoning.radius_m
                   ? prev
                   : { lat: zoning.lat, lon: zoning.lon, radiusM: zoning.radius_m },
+              );
+            }
+            if (event.tool === "school_facilities" && Array.isArray((event.result as { facilities?: unknown })?.facilities)) {
+              const school = event.result as SchoolFacilitiesResult;
+              setDistribution(null);
+              setPolygonView(null);
+              setFacilities(school);
+              setHighlightStation((prev) =>
+                prev?.lat === school.lat && prev?.lon === school.lon && prev?.radiusM === school.radius_m
+                  ? prev
+                  : { lat: school.lat, lon: school.lon, radiusM: school.radius_m },
               );
             }
           } else if (event.kind === "status") {
@@ -185,8 +204,17 @@ export default function Home() {
           distribution={distribution?.points}
           distributionMetric={distribution?.metric}
           polygonView={polygonView}
+          facilities={facilities}
           highlightStation={highlightStation}
         />
+        {facilities && (
+          <div className="absolute bottom-3 left-3 rounded-lg border border-neutral-200 bg-white/95 px-3 py-2 text-xs shadow dark:border-neutral-700 dark:bg-neutral-900/95">
+            <p className="font-medium">학교/보육시설 3D ({facilities.facilities.length}건)</p>
+            <p className="mt-0.5 text-neutral-500">
+              주황 = 유치원·보육시설, 파랑 = 초등·중학교. 반경 {Math.round(facilities.radius_m)}m 이내.
+            </p>
+          </div>
+        )}
         {polygonView && (
           <div className="absolute bottom-3 left-3 rounded-lg border border-neutral-200 bg-white/95 px-3 py-2 text-xs shadow dark:border-neutral-700 dark:bg-neutral-900/95">
             <p className="font-medium">

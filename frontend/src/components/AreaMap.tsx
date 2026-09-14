@@ -10,12 +10,14 @@ import {
   hazardPolygonToShapes,
   zoningPolygonToShapes,
 } from "@/components/polygonThreeLayer";
+import { FacilityThreeLayer, isPreschoolKind } from "@/components/facilityThreeLayer";
 import { DomeScanLayer } from "@/components/domeScanLayer";
 import type {
   DistributionPoint,
   HazardPolygonResult,
   MapPin,
   NearbyStation,
+  SchoolFacilitiesResult,
   ZoningMassingResult,
 } from "@/lib/types";
 
@@ -70,6 +72,13 @@ function colorFromPercentile(percentile: number): string {
   return `hsl(${hue}, 72%, 42%)`;
 }
 
+// 일본 부동산 표기 관례(徒歩1分=80m)를 그대로 쓴다 — 실측 도보 시간이
+// 아니라 근사치라는 뜻에서 "약"을 붙인다. 학급수 등 백엔드에 없는 값은
+// 지어내지 않는다(school_facilities 응답엔 name/kind/distance_m뿐이다).
+function walkMinutes(distanceM: number): number {
+  return Math.max(1, Math.ceil(distanceM / 80));
+}
+
 export const AreaMap = memo(function AreaMap({
   areas,
   numbered = true,
@@ -77,6 +86,7 @@ export const AreaMap = memo(function AreaMap({
   distribution = [],
   distributionMetric,
   polygonView = null,
+  facilities = null,
   highlightStation = null,
 }: {
   areas: MapPin[];
@@ -89,6 +99,9 @@ export const AreaMap = memo(function AreaMap({
   distributionMetric?: string;
   /** hazard_polygons/zoning_massing 결과. 있으면 다른 모드보다 우선한다. */
   polygonView?: PolygonView | null;
+  /** school_facilities 결과. polygonView 와 같은 우선순위 — 있으면 다른
+   * 모드보다 우선하고, 서로 배타적이다(page.tsx 가 상호 초기화한다). */
+  facilities?: SchoolFacilitiesResult | null;
   /** 돔+스캐닝 링 강조 표시할 역 — explain_area·rank_areas·hazard_polygons 등
    * 단일 역에 포커스가 생길 때 설정한다. null 이면 숨긴다. */
   highlightStation?: { lat: number; lon: number; radiusM?: number } | null;
@@ -98,6 +111,7 @@ export const AreaMap = memo(function AreaMap({
   const markers = useRef<Marker[]>([]);
   const metricLayer = useRef<MetricThreeLayer | null>(null);
   const polygonLayer = useRef<PolygonThreeLayer | null>(null);
+  const facilityLayer = useRef<FacilityThreeLayer | null>(null);
   const domeLayer = useRef<DomeScanLayer | null>(null);
   const pendingHighlight = useRef<{ lat: number; lon: number; radiusM?: number } | null>(null);
   // 마지막으로 pitch=45 카메라를 맞춘 역 — 같은 역이면 애니메이션을 반복 호출하지 않는다.
@@ -121,6 +135,9 @@ export const AreaMap = memo(function AreaMap({
       const polygons = new PolygonThreeLayer();
       instance.addLayer(polygons);
       polygonLayer.current = polygons;
+      const facilityMarkers = new FacilityThreeLayer();
+      instance.addLayer(facilityMarkers);
+      facilityLayer.current = facilityMarkers;
       const dome = new DomeScanLayer();
       instance.addLayer(dome);
       domeLayer.current = dome;
@@ -139,6 +156,7 @@ export const AreaMap = memo(function AreaMap({
       map.current = null;
       metricLayer.current = null;
       polygonLayer.current = null;
+      facilityLayer.current = null;
       domeLayer.current = null;
     };
   }, []);
@@ -154,6 +172,7 @@ export const AreaMap = memo(function AreaMap({
     // 지우고 이것만 그린다.
     if (polygonView) {
       metricLayer.current?.setPoints([], barConfigFor(undefined));
+      facilityLayer.current?.setFacilities([]);
       const shapes =
         polygonView.kind === "hazard"
           ? polygonView.result.polygons.flatMap(hazardPolygonToShapes)
@@ -188,6 +207,49 @@ export const AreaMap = memo(function AreaMap({
       return;
     }
     polygonLayer.current?.setShapes([]);
+
+    // facilities(학교/보육시설 3D 마커)도 polygonView 와 같은 우선순위다 —
+    // 좌표 하나를 콕 집어 조회한 결과라 다른 모드와 같이 그리면 헷갈린다.
+    if (facilities) {
+      metricLayer.current?.setPoints([], barConfigFor(undefined));
+      facilityLayer.current?.setFacilities(facilities.facilities);
+
+      // 3D 마커만으론 무엇을 가리키는지 안 보인다(색만으로 유치원/학교
+      // 구분이 안 됨) — 이름 라벨 + 클릭 시 상세 팝업을 얹는다. 다른 핀들과
+      // 같은 maplibregl.Marker/Popup 패턴이라 CSS2DRenderer 같은 별도
+      // 렌더러를 안 늘린다.
+      facilities.facilities.forEach((facility) => {
+        const preschool = isPreschoolKind(facility.kind);
+        const label = document.createElement("div");
+        label.style.cssText =
+          `border:1.5px solid ${preschool ? "#ff8a3d" : "#3d7aff"};` +
+          "border-radius:9999px;background:rgba(23,23,23,.85);color:white;" +
+          "padding:2px 8px;font-size:11px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.4);";
+        label.textContent = facility.name || facility.kind;
+        const marker = new maplibregl.Marker({ element: label, anchor: "bottom" })
+          .setLngLat([facility.lon, facility.lat])
+          .setPopup(
+            new maplibregl.Popup({ offset: 10 }).setText(
+              `${facility.name || facility.kind} (${facility.kind}) · ` +
+                `도보 약 ${walkMinutes(facility.distance_m)}분(직선거리 ${Math.round(facility.distance_m)}m)`,
+            ),
+          )
+          .addTo(instance);
+        markers.current.push(marker);
+      });
+
+      const { lat, lon, radius_m } = facilities;
+      const dlat = radius_m / 111_320;
+      const dlon = radius_m / (111_320 * Math.cos((lat * Math.PI) / 180));
+      const bounds = new maplibregl.LngLatBounds(
+        [lon - dlon, lat - dlat],
+        [lon + dlon, lat + dlat],
+      );
+      const camera = instance.cameraForBounds(bounds, { padding: 60, pitch: 60 });
+      instance.easeTo({ ...camera, pitch: 60, duration: 600 });
+      return;
+    }
+    facilityLayer.current?.setFacilities([]);
 
     // 분포 모드가 있으면 그것만 그린다 — 순위 핀과 percentile 색점을 같이
     // 띄우면 "이 색이 순위인지 지표인지" 헷갈린다.
@@ -300,7 +362,7 @@ export const AreaMap = memo(function AreaMap({
         duration: 600,
       });
     }
-  }, [areas, numbered, nearby, distribution, distributionMetric, polygonView, highlightStation]);
+  }, [areas, numbered, nearby, distribution, distributionMetric, polygonView, facilities, highlightStation]);
 
   useEffect(() => {
     if (highlightStation) {

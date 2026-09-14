@@ -25,3 +25,10 @@ class ZoningPolygon:
     youto_id: int
     use_area_ja: str
     height_m: float
+
+
+@dataclass(frozen=True)
+class ParkPolygon:
+    geometry: dict[str, object]
+    #: OSM 에 이름이 없는 공원도 있다(실측 확인, 2026-09-14). 지어내지 않는다.
+    name: str | None

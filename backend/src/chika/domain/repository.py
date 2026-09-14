@@ -9,7 +9,7 @@ from chika.domain.model.criteria import Household
 from chika.domain.model.facility import SchoolFacility
 from chika.domain.model.metrics import RawMetrics
 from chika.domain.model.new_construction import NewConstructionListing
-from chika.domain.model.polygon import HazardPolygon, ZoningPolygon
+from chika.domain.model.polygon import HazardPolygon, ParkPolygon, ZoningPolygon
 from chika.domain.model.station import Station
 
 
@@ -65,3 +65,10 @@ class SchoolFacilitySource(Protocol):
     def facilities_near(
         self, lat: float, lon: float, radius_m: float
     ) -> Sequence[SchoolFacility]: ...
+
+
+class ParkPolygonSource(Protocol):
+    """3D 시각화용 OSM 공원 Polygon 조회 포트. 구현체(infrastructure)가
+    Overpass 응답을 이미 GeoJSON으로 변환한 결과만 돌려준다."""
+
+    def polygons_near(self, lat: float, lon: float, radius_m: float) -> Sequence[ParkPolygon]: ...

@@ -11,7 +11,7 @@ from chika.etl.suumo_client import SuumoClient, SuumoFetchError
 
 def test_fetch_html_returns_decoded_body() -> None:
     def transport(url: str) -> bytes:
-        return "<html>ok</html>".encode("utf-8")
+        return b"<html>ok</html>"
 
     client = SuumoClient(transport=transport, sleep=lambda _: None)
     assert client.fetch_html("https://suumo.jp/x") == "<html>ok</html>"

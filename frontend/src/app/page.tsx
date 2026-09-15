@@ -63,6 +63,13 @@ export default function Home() {
   // 이번 턴이 만든 어시스턴트 메시지의 인덱스. `turns` 클로저가 아니라
   // 이 카운터로 계산해야 연속 호출에서도 어긋나지 않는다.
   const turnCount = useRef(0);
+  // hazard_polygons/zoning_massing 은 프롬프트 규칙상 응답 끝에 항상
+  // metric_distribution 을 이어서 호출한다(같은 턴 안에서) — 그 연쇄 호출이
+  // 방금 그린 3D 오버레이를 지워버리지 않도록, "이번 턴에 3D 오버레이를
+  // 이미 그렸는지"를 턴 단위로 추적한다. 새 턴마다 리셋되고, 오버레이
+  // 4종 중 하나가 뜨면 true — metric_distribution 은 이게 true 면 오버레이를
+  // 건드리지 않는다(이어서 온 것이지 새 분포 요청이 아니므로).
+  const overlaySetThisTurn = useRef(false);
 
   const send = useCallback(
     async (message: string) => {
@@ -70,6 +77,7 @@ export default function Home() {
       setBusy(true);
       setError(null);
       setInput("");
+      overlaySetThisTurn.current = false;
       // 이 턴의 사용자 메시지는 turnCount.current, 어시스턴트 응답은 그 다음
       // 자리에 놓인다 — push 되기 전에 인덱스를 고정해 둔다.
       const assistantIndex = turnCount.current + 1;
@@ -121,15 +129,22 @@ export default function Home() {
             }
             const dist = event.result as Partial<MetricDistribution> | undefined;
             if (event.tool === "metric_distribution" && Array.isArray(dist?.points)) {
-              // 분포 모드는 순위/단일 조회 핀과 동시에 뜨면 색의 의미가
-              // 헷갈린다 — AreaMap이 distribution 이 있으면 그것만 그린다.
               setDistribution(dist as MetricDistribution);
-              setOverlays([]);
-              // 전체 분포를 보는 모드 — 단일 강조 없앤다
-              setHighlightStation(null);
+              // hazard_polygons/zoning_massing 이 같은 턴에 이미 오버레이를
+              // 그렸다면, 이 호출은 그 뒤에 프롬프트 규칙이 강제로 이어붙인
+              // 연쇄 호출이다(사용자가 새로 분포를 물은 게 아니다) — 방금
+              // 그린 3D 오버레이를 지우지 않는다. AreaMap은 overlays 가
+              // 있으면 그걸 distribution 보다 우선해서 그리므로, 오버레이를
+              // 안 지워도 화면이 헷갈리지 않는다.
+              if (!overlaySetThisTurn.current) {
+                setOverlays([]);
+                // 전체 분포를 보는 모드 — 단일 강조 없앤다
+                setHighlightStation(null);
+              }
             }
             if (event.tool === "hazard_polygons" && Array.isArray((event.result as { polygons?: unknown })?.polygons)) {
               const hazard = event.result as HazardPolygonResult;
+              overlaySetThisTurn.current = true;
               setDistribution(null);
               setOverlays((prev) => [...prev.filter((o) => o.kind !== "hazard"), { kind: "hazard", result: hazard }]);
               setHighlightStation((prev) =>
@@ -140,6 +155,7 @@ export default function Home() {
             }
             if (event.tool === "zoning_massing" && Array.isArray((event.result as { polygons?: unknown })?.polygons)) {
               const zoning = event.result as ZoningMassingResult;
+              overlaySetThisTurn.current = true;
               setDistribution(null);
               setOverlays((prev) => [...prev.filter((o) => o.kind !== "zoning"), { kind: "zoning", result: zoning }]);
               setHighlightStation((prev) =>
@@ -150,6 +166,7 @@ export default function Home() {
             }
             if (event.tool === "park_polygons" && Array.isArray((event.result as { polygons?: unknown })?.polygons)) {
               const park = event.result as ParkPolygonResult;
+              overlaySetThisTurn.current = true;
               setDistribution(null);
               setOverlays((prev) => [...prev.filter((o) => o.kind !== "park"), { kind: "park", result: park }]);
               setHighlightStation((prev) =>
@@ -160,6 +177,7 @@ export default function Home() {
             }
             if (event.tool === "school_facilities" && Array.isArray((event.result as { facilities?: unknown })?.facilities)) {
               const school = event.result as SchoolFacilitiesResult;
+              overlaySetThisTurn.current = true;
               setDistribution(null);
               setOverlays((prev) => [...prev.filter((o) => o.kind !== "facilities"), { kind: "facilities", result: school }]);
               setHighlightStation((prev) =>

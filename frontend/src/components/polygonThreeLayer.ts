@@ -35,10 +35,9 @@ const SEDIMENT_RED_HEIGHT_M = 40.0; // Red Zone — 높고 날카롭게
 //: "약하게라도 위험이 있다"가 화면에서도 보이게 한다.
 const MIN_HAZARD_HEIGHT_M = 25.0;
 
-//: 레이어별 색상 축(hue, 0~1). sediment 는 Yellow/Red 존을 그대로 쓰므로
-//: (등급표를 몰라도 색으로 바로 읽힌다) 여기 없다 — 아래 sedimentColor 참고.
+//: 레이어별 색상 축(hue, 0~1). flood/sediment 는 고정 hex 색을 쓰므로
+//: (아래 FLOOD_COLOR/sedimentColor 참고) 여기 없다.
 const HAZARD_HUE: Partial<Record<HazardPolygon["layer"], number>> = {
-  flood: 0.6, // 파랑
   liquefaction: 0.78, // 보라
   storm_surge: 0.5, // 청록
   tsunami: 0.92, // 자홍
@@ -51,26 +50,41 @@ function severityColor(hue: number, severity: number): THREE.Color {
   return new THREE.Color().setHSL(hue, 0.85, 0.55 - severity * 0.3);
 }
 
-/** Yellow/Red 존 그대로 — 등급표를 몰라도 색으로 바로 읽힌다. */
-function sedimentColor(severity: number): THREE.Color {
-  return severity >= 1.0 ? new THREE.Color(0xdc2626) : new THREE.Color(0xeab308);
-}
+//: 홍수는 색상(hue)은 고정하고 농도(opacity)로 침수심 구간을 구분한다 —
+//: 0.5m 구간도 최소한으로는 보이되, 깊을수록 진해진다.
+const FLOOD_COLOR = new THREE.Color(0x0088ff);
+const FLOOD_MIN_OPACITY = 0.2;
+const FLOOD_MAX_OPACITY = 0.65;
+
+//: Yellow/Red 존 고정 hex — 등급표를 몰라도 색으로 바로 읽힌다.
+const SEDIMENT_YELLOW_COLOR = new THREE.Color(0xffb300);
+const SEDIMENT_RED_COLOR = new THREE.Color(0xff1744);
 
 export function hazardPolygonToShapes(polygon: HazardPolygon): ExtrudedShape[] {
   if (polygon.layer === "sediment") {
     const isRed = polygon.severity >= 1.0;
-    const color = sedimentColor(polygon.severity);
     return exteriorRings(polygon.geometry).map((ring) => ({
       ring,
       heightM: isRed ? SEDIMENT_RED_HEIGHT_M : SEDIMENT_YELLOW_HEIGHT_M,
-      color,
-      opacity: isRed ? 0.60 : 0.35,
+      color: isRed ? SEDIMENT_RED_COLOR : SEDIMENT_YELLOW_COLOR,
+      opacity: isRed ? 0.55 : 0.35,
       pulse: isRed,
     }));
   }
   const heightM = Math.max(MIN_HAZARD_HEIGHT_M, polygon.severity * MAX_HAZARD_HEIGHT_M);
+  if (polygon.layer === "flood") {
+    const opacity = FLOOD_MIN_OPACITY + polygon.severity * (FLOOD_MAX_OPACITY - FLOOD_MIN_OPACITY);
+    return exteriorRings(polygon.geometry).map((ring) => ({
+      ring,
+      heightM,
+      color: FLOOD_COLOR,
+      opacity,
+    }));
+  }
+  // 액상화 등 다른 레이어는 홍수 조각과 자주 겹친다 — 0.75처럼 불투명하면
+  // 밑에 깔린 파란 침수 조각이 완전히 가려지므로 옅게 낮춰 둔다.
   const color = severityColor(HAZARD_HUE[polygon.layer] ?? 0.6, polygon.severity);
-  return exteriorRings(polygon.geometry).map((ring) => ({ ring, heightM, color, opacity: 0.75 }));
+  return exteriorRings(polygon.geometry).map((ring) => ({ ring, heightM, color, opacity: 0.3 }));
 }
 
 /** 저층(초록)일수록 낮고 여유롭게, 상업(주황)일수록 높고 빽빽하게 — 1・2=저층,
@@ -160,7 +174,16 @@ export class PolygonThreeLayer implements maplibregl.CustomLayerInterface {
       const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
       const mesh = new THREE.Mesh(
         geometry,
-        new THREE.MeshPhongMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide }),
+        new THREE.MeshPhongMaterial({
+          color,
+          transparent: true,
+          opacity,
+          side: THREE.DoubleSide,
+          // 반투명 셀 여러 장이 겹칠 때 depth buffer 를 쓰면 서로 가려
+          // 얼룩덜룩해진다(특히 침수심 격자 셀들이 인접해 있을 때) — 겹쳐도
+          // 안쪽 건물·핀·링이 그대로 비치도록 깊이 기록만 끈다.
+          depthWrite: false,
+        }),
       );
       this.meshes.add(mesh);
       if (pulse) this.pulseMeshes.push(mesh);

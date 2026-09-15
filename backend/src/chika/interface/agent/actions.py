@@ -618,6 +618,20 @@ _MAX_PARK_RADIUS_M = 1500.0
 _MAX_POLYGON_RADIUS_M = 2_000.0
 
 
+def _stash_full_and_strip_geometry(
+    state: SessionState, tool_name: str, full: dict[str, Any]
+) -> dict[str, Any]:
+    """`full`을 SessionState에 쟁여 두고, `polygons`에서 geometry를 뺀
+    압축본을 돌려준다 — 모델은 압축본만 대화 이력에 갖고, runner.py가
+    SSE tool 이벤트를 만들 때 전체본을 꺼내 쓴다([[state]] 참고)."""
+    state.pending_overlay_payloads.setdefault(tool_name, []).append(full)
+    compact = dict(full)
+    compact["polygons"] = [
+        {k: v for k, v in polygon.items() if k != "geometry"} for polygon in full["polygons"]
+    ]
+    return compact
+
+
 def act_hazard_polygons(
     state: SessionState, station_id: str, radius_m: float = 800.0
 ) -> dict[str, Any]:
@@ -637,7 +651,7 @@ def act_hazard_polygons(
     except MlitApiError as exc:
         return {"error": "mlit_unavailable", "detail": str(exc)}
 
-    return {
+    full = {
         "station_id": station.id,
         "name_ja": station.name_ja,
         "ward": station.ward,
@@ -655,6 +669,7 @@ def act_hazard_polygons(
             for p in polygons
         ],
     }
+    return _stash_full_and_strip_geometry(state, "hazard_polygons", full)
 
 
 def act_zoning_massing(
@@ -674,7 +689,7 @@ def act_zoning_massing(
     except MlitApiError as exc:
         return {"error": "mlit_unavailable", "detail": str(exc)}
 
-    return {
+    full = {
         "station_id": station.id,
         "name_ja": station.name_ja,
         "ward": station.ward,
@@ -692,6 +707,7 @@ def act_zoning_massing(
             for p in polygons
         ],
     }
+    return _stash_full_and_strip_geometry(state, "zoning_massing", full)
 
 
 #: 한 번에 LLM에 넘기는 신축 물건 상한 — rank_areas의 MAX_RANKING_LIMIT과 같은 이유.
@@ -854,10 +870,11 @@ def act_park_polygons(
     except OverpassFetchError as exc:
         return {"error": "overpass_unavailable", "detail": str(exc)}
 
-    return {
+    full = {
         "lat": lat,
         "lon": lon,
         "radius_m": radius,
         "attribution": OSM_ATTRIBUTION,
         "polygons": [{"geometry": p.geometry, "name": p.name} for p in polygons],
     }
+    return _stash_full_and_strip_geometry(state, "park_polygons", full)

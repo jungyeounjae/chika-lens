@@ -38,6 +38,12 @@ _TOOL_STATUS_KO: dict[str, str] = {
 }
 
 
+#: 이 툴들은 모델에게는 좌표 없는 압축본만 주고, SSE로는 원본 좌표가 든
+#: 전체본을 낸다 — actions.py의 `_stash_full_and_strip_geometry`가 쌓아 둔
+#: `state.pending_overlay_payloads`에서 꺼낸다.
+_OVERLAY_TOOLS_WITH_STASHED_PAYLOAD = frozenset({"hazard_polygons", "zoning_massing", "park_polygons"})
+
+
 async def run_turn(state: SessionState, message: str) -> AsyncIterator[Event]:
     """대화 한 턴. 텍스트 증분과 툴 결과를 다른 채널로 내보낸다 (스펙 §5.4)."""
     # 대화 이력을 함께 넘긴다. 넘기지 않으면 매 턴이 백지에서 시작해
@@ -75,7 +81,13 @@ async def run_turn(state: SessionState, message: str) -> AsyncIterator[Event]:
 
         if item.type == "tool_call_output_item":
             call_id = _call_id(item.raw_item)
-            yield tool_event(names_by_call.get(call_id or "", "tool"), item.output)
+            name = names_by_call.get(call_id or "", "tool")
+            payload = item.output
+            if name in _OVERLAY_TOOLS_WITH_STASHED_PAYLOAD:
+                queue = state.pending_overlay_payloads.get(name)
+                if queue:
+                    payload = queue.pop(0)
+            yield tool_event(name, payload)
 
 
 def _attr(raw: Any, key: str) -> str | None:

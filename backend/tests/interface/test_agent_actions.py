@@ -1067,7 +1067,10 @@ def _state_with_sources(hazard_source, zoning_source) -> SessionState:  # noqa: 
     )
 
 
-def test_hazard_polygons_returns_the_polygons_and_attribution() -> None:
+def test_hazard_polygons_returns_the_polygons_and_attribution_without_geometry() -> None:
+    """모델이 보는 반환값에는 geometry가 없다 — 대화 이력에 좌표가 쌓여
+    턴이 길어질수록 토큰을 불리는 걸 막는다(전체본은 stash 큐로 간다,
+    아래 test_hazard_polygons_stashes_the_full_geometry_for_the_frontend)."""
     geometry = {"type": "Polygon", "coordinates": []}
     polygon = HazardPolygon(layer="flood", geometry=geometry, severity=0.5, label="3.0m~5.0m")
     hazard_source = _FakeHazardPolygonSourceWith([polygon])
@@ -1077,7 +1080,20 @@ def test_hazard_polygons_returns_the_polygons_and_attribution() -> None:
 
     assert result["station_id"] == "a"
     assert result["attribution"] == "出典：国土交通省 不動産情報ライブラリ"
-    assert result["polygons"] == [
+    assert result["polygons"] == [{"layer": "flood", "severity": 0.5, "label": "3.0m~5.0m"}]
+
+
+def test_hazard_polygons_stashes_the_full_geometry_for_the_frontend() -> None:
+    geometry = {"type": "Polygon", "coordinates": []}
+    polygon = HazardPolygon(layer="flood", geometry=geometry, severity=0.5, label="3.0m~5.0m")
+    hazard_source = _FakeHazardPolygonSourceWith([polygon])
+    session = _state_with_sources(hazard_source, _FakeZoningPolygonSource())
+
+    act_hazard_polygons(session, "a")
+
+    stashed = session.pending_overlay_payloads["hazard_polygons"]
+    assert len(stashed) == 1
+    assert stashed[0]["polygons"] == [
         {"layer": "flood", "geometry": geometry, "severity": 0.5, "label": "3.0m~5.0m"}
     ]
 
@@ -1094,7 +1110,7 @@ def test_hazard_polygons_reports_when_mlit_is_unreachable() -> None:
     assert result["error"] == "mlit_unavailable"
 
 
-def test_zoning_massing_returns_the_polygons_and_attribution() -> None:
+def test_zoning_massing_returns_the_polygons_and_attribution_without_geometry() -> None:
     polygon = ZoningPolygon(
         geometry={"type": "Polygon", "coordinates": []},
         youto_id=1,
@@ -1108,6 +1124,11 @@ def test_zoning_massing_returns_the_polygons_and_attribution() -> None:
 
     assert result["attribution"] == "出典：国土交通省 不動産情報ライブラリ"
     assert result["polygons"] == [
+        {"youto_id": 1, "use_area_ja": "第一種低層住居専用地域", "height_m": 10.0}
+    ]
+
+    stashed = session.pending_overlay_payloads["zoning_massing"]
+    assert stashed[0]["polygons"] == [
         {
             "geometry": {"type": "Polygon", "coordinates": []},
             "youto_id": 1,
@@ -1448,7 +1469,7 @@ def _state_with_park_source(source) -> SessionState:  # noqa: ANN001
     )
 
 
-def test_park_polygons_returns_polygons_and_attribution() -> None:
+def test_park_polygons_returns_polygons_and_attribution_without_geometry() -> None:
     polygon = ParkPolygon(
         geometry={"type": "Polygon", "coordinates": [[[139.6, 35.76]]]}, name="北原公園"
     )
@@ -1456,8 +1477,11 @@ def test_park_polygons_returns_polygons_and_attribution() -> None:
 
     result = act_park_polygons(session, lat=35.76, lon=139.61)
 
-    assert result["polygons"] == [{"geometry": polygon.geometry, "name": "北原公園"}]
+    assert result["polygons"] == [{"name": "北原公園"}]
     assert result["attribution"] == "© OpenStreetMap contributors"
+
+    stashed = session.pending_overlay_payloads["park_polygons"]
+    assert stashed[0]["polygons"] == [{"geometry": polygon.geometry, "name": "北原公園"}]
 
 
 def test_park_polygons_returns_an_empty_list_when_none_are_nearby() -> None:

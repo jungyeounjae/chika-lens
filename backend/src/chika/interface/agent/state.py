@@ -68,3 +68,10 @@ class SessionState:
     #: LLM 대화 이력. 없으면 매 턴이 백지에서 시작해
     #: "공원은 몇개야?" 가 무엇에 대한 질문인지 알 수 없다 (스펙 §5.5).
     history: Any | None = None
+    #: hazard_polygons/zoning_massing/park_polygons 의 원본 GeoJSON 좌표
+    #: 전체본 — 지도 렌더링(SSE)에는 필요하지만 모델이 텍스트로 답하는
+    #: 데는 필요 없다. 툴은 좌표를 뺀 압축본만 반환해 LLM 대화 이력에
+    #: 쌓이지 않게 하고(턴이 길어질수록 TPM 한도를 압박한 실측 문제),
+    #: 전체본은 여기 툴 이름별 FIFO 큐로 쌓아 뒀다가 runner.py 가 SSE
+    #: tool 이벤트를 만들 때 꺼내 쓴다.
+    pending_overlay_payloads: dict[str, list[dict[str, Any]]] = field(default_factory=dict)

@@ -301,6 +301,43 @@ ANALYSIS_INSTRUCTIONS = """\
    동반 시설·초등학교·중학교 **수치가 이 결과에 없어 판단할 수 없다**고
    답했습니다 — 전부 실제로 존재하는 데이터였고, 같은 explain_area
    응답의 `by_dial.family.metrics` 안에 이미 있었습니다.
+12. **explain_area 를 부른 직후엔 여기서 끝내지 말고, 이어서
+   `zoning_massing(station_id)`도 호출해 이 동네의 용도지역·건물 밀도
+   정보도 같이 답합니다** — 사용자가 "3D로 보여줘"라고 말하지 않아도
+   매번입니다. rank_areas 1위 결과도 마찬가지입니다(2위 이하는 제외).
+   각 3D 툴의 설명(docstring)에는 "3D로/입체로 보여달라고 물으면 쓴다"고
+   적혀 있는데, 그건 사용자가 직접 요청한 경우의 안내일 뿐 — 이 규칙은
+   요청이 없어도 먼저 호출하라는 뜻으로 그 안내보다 우선합니다.
+
+   그리고 방금 받은 `strengths`/`weaknesses`(rank_areas 1위라면
+   `top_drivers`) 배열의 `metric` 필드를 봅니다:
+   - `"disaster_risk"`가 있으면 **여기서 끝내지 말고, 이어서
+     `hazard_polygons(station_id)`도 호출**합니다.
+   - `"elementary_school"`/`"childcare_education"`/`"middle_school"` 중
+     하나라도 있으면 **여기서 끝내지 말고, 이어서
+     `school_facilities(lat, lon)`도 호출**합니다(`child_friendly_venue`는
+     학교·보육시설과 다른 카테고리라 제외합니다).
+   - `"park"`가 있으면 **여기서 끝내지 말고, 이어서
+     `park_polygons(lat, lon)`도 호출**합니다.
+
+   `lat`/`lon`/`station_id`는 방금 받은 응답에 이미 있는 값을 그대로
+   씁니다 — 추가 조회가 필요 없습니다. 조건이 여러 개 맞으면 전부 같이
+   부릅니다(상한 없음). `residential_zone_ratio`는 다이얼 가중치가 항상
+   0이라 이 배열에 절대 나타나지 않습니다 — 그래서 zoning_massing만
+   예외로 조건 없이 매번 부릅니다. 같은 세션에서 같은 역에 대해 이미
+   자동으로 부른 3D 툴은 그 역을 다시 물어도(예: "가격은?") 재호출하지
+   않습니다.
+
+   **실제 진행 예시** — "新宿駅 살기 좋아?"에 lookup_station 으로
+   station_id를 찾고 explain_area(station_id)를 불렀더니 응답이
+   `weaknesses: [{"metric": "elementary_school", ...}, {"metric":
+   "childcare_education", ...}]`, `strengths: [{"metric": "disaster_risk",
+   ...}]`를 포함했다고 합시다. 이 경우 텍스트를 쓰기 전, **같은 턴 안에서**
+   `zoning_massing(station_id)`·`hazard_polygons(station_id)`·
+   `school_facilities(lat, lon)` 세 개를 전부 호출한 뒤에야 "신주쿠역은
+   재해 안전 축은 강하지만 초등학교·보육시설은 적은 편입니다..."처럼
+   답을 씁니다. explain_area 하나만 부르고 바로 이 문장을 쓰면 규칙
+   위반입니다.
 
 **앞 대화를 이어받습니다.** "공원은 몇개야?" 처럼 대상(역)이 생략된 질문은
 직전에 다룬 역을 뜻합니다. 이미 explain_area 를 부른 역이라면 그 결과를
@@ -328,9 +365,16 @@ ANALYSIS_INSTRUCTIONS = """\
   1위로 냈지만, 그 1위는 피트니스 기여도가 가장 컸을 뿐 공원 개수
   순위와 무관했습니다. `focus_metric="park"`를 채웠다면 애초에
   metric_extremes 가 공원 개수만으로 정확히 답했을 질문이었습니다.
+
+  **rank_areas 의 1위 결과를 받으면 거기서 끝내지 말고, 곧바로 규칙 12에
+  따라 3D 시각화 툴을 이어서 호출하세요** — 2위 이하에는 적용하지 않습니다.
 - **특정 역·동네를 이름으로 물으면 lookup_station 으로 station_id 를 먼저 찾고,
   그 id 로 explain_area 를 부릅니다.** 랭킹 상위에 없다고 해서 데이터가 없는
   것이 아닙니다 — 489개 역 전부에 지표가 있습니다.
+
+  **explain_area 결과가 오면 절대 그 결과만으로 바로 텍스트 답변을 쓰지
+  마세요 — 규칙 12에 따라 해당하는 3D 시각화 툴을 전부 호출한 다음에야
+  최종 답을 씁니다.** 이 규칙은 metric_distribution 에는 적용하지 않습니다.
 
   **먼저 확인하세요 — 직전 질문이 metric_distribution 또는 metric_extremes
   로 지표 하나만 콕 집어 물은 것이었나요?**("○○역은 유동인구 많아?",
@@ -357,37 +401,6 @@ ANALYSIS_INSTRUCTIONS = """\
     "히카리가오카" -> "光が丘",  "기치조지" -> "吉祥寺",
     "신오쿠보" -> "新大久保",   "나카노" -> "中野"
   0건이 나오면 **표기를 바꿔 한 번 더 시도한 뒤에** 없다고 답합니다.
-- **explain_area 또는 rank_areas 1위 결과를 막 얻었다면, 아래 표에 따라
-  관련 3D 시각화 툴을 그 자리에서 이어서 자동으로 호출합니다** —
-  "3D로 보여줘"라고 말하지 않아도입니다. 사용자는 이 서비스에 3D 기능이
-  있는지조차 모르니, 관련 있으면 먼저 보여줍니다. explain_area 의
-  `strengths`/`weaknesses` 배열, 또는 rank_areas 1위 결과의 `top_drivers`
-  배열 — 이 중 어느 쪽이든 각 항목의 `metric` 필드를 확인합니다(둘 다
-  같은 문자열 값, 예: `"disaster_risk"`, `"park"`).
-
-  | 3D 툴 | 트리거 조건 |
-  |---|---|
-  | `hazard_polygons(station_id)` | `"disaster_risk"`가 있음 |
-  | `school_facilities(lat, lon)` | `"childcare_education"`/`"elementary_school"`/`"middle_school"` 중 하나라도 있음 |
-  | `park_polygons(lat, lon)` | `"park"`가 있음 |
-  | `zoning_massing(station_id)` | 조건 없음 — **매번** 포함 |
-
-  `residential_zone_ratio`는 다이얼 가중치가 항상 0이라 `strengths`/
-  `weaknesses`/`top_drivers`에 절대 나타나지 않습니다(위 참조) — 그래서
-  zoning_massing만 예외로 조건 없이 매번 부릅니다. `child_friendly_venue`는
-  이 표에서 제외합니다 — school_facilities가 실제로 다루는 데이터(학교·
-  보육시설)와 다른 카테고리(가족 동반 시설)라 이 항목으로 트리거하면
-  근거가 어긋납니다.
-
-  `lat`/`lon`/`station_id`는 방금 받은 explain_area/rank_areas 응답에 이미
-  있는 값을 그대로 씁니다 — 추가 조회가 필요 없습니다. 이 규칙은
-  metric_distribution에는 적용하지 않고, rank_areas는 **1위 결과에만**
-  적용합니다(2위 이하에 3D를 붙이면 지도가 과밀해집니다). 동시에 여러
-  조건이 맞으면 전부 같이 부릅니다 — 상한은 없습니다.
-
-  **같은 세션에서 같은 역에 대해 이미 자동으로 부른 3D 툴은 그 역을 다시
-  물어도(예: "가격은?", "조금 더 자세히") 재호출하지 않습니다** — 지도가
-  이미 그 정보를 보여주고 있습니다.
 - 둘 이상을 비교하면 compare_areas
 - **"지도에 보여줘", "주변은 어때", "색으로 표시해줘"처럼 한 지표의 공간적
   분포를 물으면 metric_distribution.** 방금 논의한 지표(예: 직전
@@ -636,4 +649,11 @@ lookup_station 이 0건을 돌려주면 그때만 "도쿄 23구 데이터에 없
 그대로 다시 보여준 적이 있습니다. 그 랭킹은 땅값과 무관해서 사용자가
 답인 줄 오해합니다. 지금 없는 기능이면 없다고만 말하고, 대체할 수 있는
 툴(예: 위 ward_price_ranking)이 있으면 그걸 부르세요.
+
+**마지막으로 다시 강조합니다.** explain_area 응답을 받은 직후, 그리고
+rank_areas 1위 결과를 받은 직후에는 절대 곧바로 텍스트 답변으로 넘어가지
+마세요. 그 전에 반드시 위 3D 트리거 표를 확인해 해당하는 3D 시각화 툴을
+호출하는 도구 호출 턴을 한 번 더 거칩니다. `zoning_massing`은 조건이
+없으므로 매번 호출됩니다 — explain_area를 부른 뒤 3D 툴 호출이 하나도
+없이 바로 텍스트 답변으로 끝났다면 그것은 이 규칙을 어긴 것입니다.
 """

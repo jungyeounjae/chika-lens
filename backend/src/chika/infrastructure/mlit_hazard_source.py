@@ -11,7 +11,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from shapely.geometry import shape
+from shapely.geometry import mapping, shape
+from shapely.ops import unary_union
 
 from chika.domain.model.polygon import HazardPolygon
 from chika.etl.mlit_client import MlitClient, tiles_covering
@@ -101,6 +102,24 @@ _LAYERS: tuple[tuple[MlitDataset, str, str, _SeverityFn, _LabelFn], ...] = (
 )
 
 
+def _dissolve(polygons: list[HazardPolygon]) -> list[HazardPolygon]:
+    """MLIT 원본은 벡터 타일의 작은 그리드 셀 단위로 온다 — 같은
+    (layer, severity, label) 끼리 인접 셀을 하나로 합쳐 지도에서 격자로
+    보이지 않게 한다. 등급이 다르면 정보 손실이 되므로 합치지 않는다."""
+    groups: dict[tuple[str, float, str], list[HazardPolygon]] = {}
+    for polygon in polygons:
+        key = (polygon.layer, polygon.severity, polygon.label)
+        groups.setdefault(key, []).append(polygon)
+
+    dissolved: list[HazardPolygon] = []
+    for (layer, severity, label), group in groups.items():
+        merged = unary_union([shape(p.geometry) for p in group])
+        dissolved.append(
+            HazardPolygon(layer=layer, geometry=mapping(merged), severity=severity, label=label)
+        )
+    return dissolved
+
+
 class MlitHazardPolygonSource:
     def __init__(self, client: MlitClient) -> None:
         self._client = client
@@ -140,4 +159,4 @@ class MlitHazardPolygonSource:
                             label=label_fn(raw),
                         )
                     )
-        return polygons
+        return _dissolve(polygons)

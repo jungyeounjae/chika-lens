@@ -14,6 +14,12 @@ NEAR_SQUARE = Polygon([(139.70, 35.70), (139.702, 35.70), (139.702, 35.702), (13
 STATION_LAT, STATION_LON = 35.701, 139.701  # NEAR_SQUARE 내부
 FAR_AWAY_LAT, FAR_AWAY_LON = 35.90, 139.90  # 수십km 밖
 
+#: NEAR_SQUARE 바로 옆(한 변을 공유)에 붙은 같은 크기 사각형 — MLIT 벡터
+#: 타일의 인접 그리드 셀을 흉내낸다.
+ADJACENT_SQUARE = Polygon(
+    [(139.702, 35.70), (139.704, 35.70), (139.704, 35.702), (139.702, 35.702)]
+)
+
 
 def _feature(properties: dict[str, object], polygon: Polygon = NEAR_SQUARE) -> dict[str, object]:
     return {"geometry": mapping(polygon), "properties": properties}
@@ -119,6 +125,34 @@ def test_a_storm_surge_polygon_carries_its_korean_band_label() -> None:
     storm_surge = [p for p in polygons if p.layer == "storm_surge"]
     assert len(storm_surge) == 1
     assert storm_surge[0].label == "1m~3m"
+
+
+def test_adjacent_same_severity_cells_are_dissolved_into_one_polygon() -> None:
+    """MLIT 원본은 작은 그리드 셀 단위라 같은 등급 인접 셀이 여러 개로 쪼개져
+    온다 — 화면에서 격자로 보이지 않도록 같은 (layer, severity, label) 끼리는
+    하나로 합친다."""
+    cell_a = _feature({"A31a_205": 2, "_id": "f1", "_index": _FLOOD_INDEX}, NEAR_SQUARE)
+    cell_b = _feature({"A31a_205": 2, "_id": "f2", "_index": _FLOOD_INDEX}, ADJACENT_SQUARE)
+    client = _client_returning({"XKT026": [cell_a, cell_b]})
+    source = MlitHazardPolygonSource(client)
+
+    polygons = source.polygons_near(STATION_LAT, STATION_LON, radius_m=800.0)
+
+    flood = [p for p in polygons if p.layer == "flood"]
+    assert len(flood) == 1
+    assert flood[0].severity == 2 / 6
+
+
+def test_adjacent_cells_with_different_severity_are_not_merged() -> None:
+    cell_a = _feature({"A31a_205": 2, "_id": "f1", "_index": _FLOOD_INDEX}, NEAR_SQUARE)
+    cell_b = _feature({"A31a_205": 3, "_id": "f2", "_index": _FLOOD_INDEX}, ADJACENT_SQUARE)
+    client = _client_returning({"XKT026": [cell_a, cell_b]})
+    source = MlitHazardPolygonSource(client)
+
+    polygons = source.polygons_near(STATION_LAT, STATION_LON, radius_m=800.0)
+
+    flood = [p for p in polygons if p.layer == "flood"]
+    assert len(flood) == 2
 
 
 def test_a_tsunami_polygon_carries_its_raw_band_as_label() -> None:

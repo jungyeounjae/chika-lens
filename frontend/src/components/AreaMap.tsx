@@ -23,12 +23,15 @@ import type {
   ZoningMassingResult,
 } from "@/lib/types";
 
-/** hazard_polygons/zoning_massing/park_polygons 결과 — 원본 Polygon 3D 뷰.
- * distribution/areas 보다 우선한다(가장 구체적인 "역 하나 딥다이브" 모드). */
-export type PolygonView =
+/** hazard_polygons/zoning_massing/park_polygons/school_facilities 결과 —
+ * 3D 오버레이 하나. distribution/areas 보다 우선한다(가장 구체적인 "역 하나
+ * 딥다이브" 모드). 여러 개가 동시에 배열(overlays)에 들어갈 수 있다(스펙
+ * 2026-09-15-frontend-multi-layer-overlay-design.md). */
+export type Overlay =
   | { kind: "hazard"; result: HazardPolygonResult }
   | { kind: "zoning"; result: ZoningMassingResult }
-  | { kind: "park"; result: ParkPolygonResult };
+  | { kind: "park"; result: ParkPolygonResult }
+  | { kind: "facilities"; result: SchoolFacilitiesResult };
 
 /** 좋고 나쁨이 없는 지표(백엔드 DIRECTIONLESS_METRICS 와 맞춘다) — 유동인구는
  * "많다/적다"이지 "좋다/나쁘다"가 아니다. 3D 막대에서는 이 지표들만
@@ -88,8 +91,7 @@ export const AreaMap = memo(function AreaMap({
   nearby = [],
   distribution = [],
   distributionMetric,
-  polygonView = null,
-  facilities = null,
+  overlays = [],
   highlightStation = null,
 }: {
   areas: MapPin[];
@@ -100,11 +102,9 @@ export const AreaMap = memo(function AreaMap({
   /** distribution 이 어느 지표인지 — 3D 막대 방향(highIsBad/highIsIntense)을
    * 고르는 데만 쓴다. */
   distributionMetric?: string;
-  /** hazard_polygons/zoning_massing 결과. 있으면 다른 모드보다 우선한다. */
-  polygonView?: PolygonView | null;
-  /** school_facilities 결과. polygonView 와 같은 우선순위 — 있으면 다른
-   * 모드보다 우선하고, 서로 배타적이다(page.tsx 가 상호 초기화한다). */
-  facilities?: SchoolFacilitiesResult | null;
+  /** hazard_polygons/zoning_massing/park_polygons/school_facilities 결과들 —
+   * 있으면 다른 모드보다 우선하고, 배열의 모든 항목을 동시에 그린다. */
+  overlays?: Overlay[];
   /** 돔+스캐닝 링 강조 표시할 역 — explain_area·rank_areas·hazard_polygons 등
    * 단일 역에 포커스가 생길 때 설정한다. null 이면 숨긴다. */
   highlightStation?: { lat: number; lon: number; radiusM?: number } | null;
@@ -171,63 +171,50 @@ export const AreaMap = memo(function AreaMap({
     markers.current.forEach((marker) => marker.remove());
     markers.current = [];
 
-    // polygonView(원본 Polygon 3D 뷰)가 가장 구체적인 모드다 — 다른 걸 다
-    // 지우고 이것만 그린다.
-    if (polygonView) {
+    // overlays(3D 뷰)가 있으면 area/distribution 마커보다 우선한다 — 다른 걸 다
+    // 지우고 이것만 그린다. 여러 개가 동시에 있으면 폴리곤/시설을 전부 합쳐
+    // 그린다(스펙 2026-09-15-frontend-multi-layer-overlay-design.md).
+    if (overlays.length > 0) {
       metricLayer.current?.setPoints([], barConfigFor(undefined));
-      facilityLayer.current?.setFacilities([]);
-      const shapes =
-        polygonView.kind === "hazard"
-          ? polygonView.result.polygons.flatMap(hazardPolygonToShapes)
-          : polygonView.kind === "zoning"
-            ? polygonView.result.polygons.flatMap(zoningPolygonToShapes)
-            : polygonView.result.polygons.flatMap(parkPolygonToShapes);
+
+      const shapes = overlays.flatMap((overlay) =>
+        overlay.kind === "hazard"
+          ? overlay.result.polygons.flatMap(hazardPolygonToShapes)
+          : overlay.kind === "zoning"
+            ? overlay.result.polygons.flatMap(zoningPolygonToShapes)
+            : overlay.kind === "park"
+              ? overlay.result.polygons.flatMap(parkPolygonToShapes)
+              : [],
+      );
       polygonLayer.current?.setShapes(shapes);
 
-      const { lat, lon, radius_m } = polygonView.result;
-      const popupText =
-        polygonView.kind === "park"
-          ? "공원 지역"
-          : `${polygonView.result.name_ja} (${polygonView.result.ward})`;
-      const pin = document.createElement("div");
-      pin.className =
-        "h-4 w-4 rounded-full border-2 border-white bg-rose-600 shadow-lg";
-      const marker = new maplibregl.Marker({ element: pin })
-        .setLngLat([lon, lat])
-        .setPopup(new maplibregl.Popup({ offset: 10 }).setText(popupText))
-        .addTo(instance);
-      markers.current.push(marker);
-
-      // pitch 를 건 뒤 곧바로 별도의 fitBounds/flyTo 를 부르면, 그 두 번째
-      // 호출이 "아직 애니메이션 시작 전(=여전히 pitch 0)"인 transform 을
-      // 기준으로 자기 카메라 파라미터를 잡아버려 pitch 가 조용히 원위치로
-      // 취소된다(실측 — flyTo 뿐 아니라 fitBounds 도 마찬가지였다. 이전에
-      // "fitBounds 로 바꾸면 된다"고 봤던 건 타이밍이 우연히 맞았던 것뿐이다).
-      // 그래서 bounds 를 직접 계산해 pitch 와 함께 **단일 easeTo 호출**로
-      // 합친다 — 취소할 두 번째 애니메이션 자체가 없다.
-      const dlat = radius_m / 111_320;
-      const dlon = radius_m / (111_320 * Math.cos((lat * Math.PI) / 180));
-      const bounds = new maplibregl.LngLatBounds(
-        [lon - dlon, lat - dlat],
-        [lon + dlon, lat + dlat],
+      const allFacilities = overlays.flatMap((overlay) =>
+        overlay.kind === "facilities" ? overlay.result.facilities : [],
       );
-      const camera = instance.cameraForBounds(bounds, { padding: 60, pitch: 60 });
-      instance.easeTo({ ...camera, pitch: 60, duration: 600 });
-      return;
-    }
-    polygonLayer.current?.setShapes([]);
+      facilityLayer.current?.setFacilities(allFacilities);
 
-    // facilities(학교/보육시설 3D 마커)도 polygonView 와 같은 우선순위다 —
-    // 좌표 하나를 콕 집어 조회한 결과라 다른 모드와 같이 그리면 헷갈린다.
-    if (facilities) {
-      metricLayer.current?.setPoints([], barConfigFor(undefined));
-      facilityLayer.current?.setFacilities(facilities.facilities);
+      // 폴리곤 계열(hazard/zoning/park)은 오버레이마다 중심점에 핀 하나씩.
+      overlays.forEach((overlay) => {
+        if (overlay.kind === "facilities") return;
+        const { lat, lon } = overlay.result;
+        const popupText =
+          overlay.kind === "park"
+            ? "공원 지역"
+            : `${overlay.result.name_ja} (${overlay.result.ward})`;
+        const pin = document.createElement("div");
+        pin.className =
+          "h-4 w-4 rounded-full border-2 border-white bg-rose-600 shadow-lg";
+        const marker = new maplibregl.Marker({ element: pin })
+          .setLngLat([lon, lat])
+          .setPopup(new maplibregl.Popup({ offset: 10 }).setText(popupText))
+          .addTo(instance);
+        markers.current.push(marker);
+      });
 
-      // 3D 마커만으론 무엇을 가리키는지 안 보인다(색만으로 유치원/학교
-      // 구분이 안 됨) — 이름 라벨 + 클릭 시 상세 팝업을 얹는다. 다른 핀들과
-      // 같은 maplibregl.Marker/Popup 패턴이라 CSS2DRenderer 같은 별도
-      // 렌더러를 안 늘린다.
-      facilities.facilities.forEach((facility) => {
+      // facilities 오버레이의 시설마다 이름 라벨 + 클릭 시 상세 팝업.
+      // 3D 마커만으론 무엇을 가리키는지 안 보인다(색만으로 유치원/학교 구분이
+      // 안 됨) — 다른 핀들과 같은 maplibregl.Marker/Popup 패턴을 쓴다.
+      allFacilities.forEach((facility) => {
         const preschool = isPreschoolKind(facility.kind);
         const label = document.createElement("div");
         label.style.cssText =
@@ -247,7 +234,14 @@ export const AreaMap = memo(function AreaMap({
         markers.current.push(marker);
       });
 
-      const { lat, lon, radius_m } = facilities;
+      // pitch 를 건 뒤 곧바로 별도의 fitBounds/flyTo 를 부르면, 그 두 번째
+      // 호출이 "아직 애니메이션 시작 전(=여전히 pitch 0)"인 transform 을
+      // 기준으로 자기 카메라 파라미터를 잡아버려 pitch 가 조용히 원위치로
+      // 취소된다(실측) — bounds 를 직접 계산해 pitch 와 함께 **단일 easeTo
+      // 호출**로 합친다. 카메라는 마지막 오버레이 기준으로만 맞춘다(여러
+      // 오버레이 bounds 통합은 범위 밖 — 스펙 참고).
+      const last = overlays[overlays.length - 1];
+      const { lat, lon, radius_m } = last.result;
       const dlat = radius_m / 111_320;
       const dlon = radius_m / (111_320 * Math.cos((lat * Math.PI) / 180));
       const bounds = new maplibregl.LngLatBounds(
@@ -258,6 +252,7 @@ export const AreaMap = memo(function AreaMap({
       instance.easeTo({ ...camera, pitch: 60, duration: 600 });
       return;
     }
+    polygonLayer.current?.setShapes([]);
     facilityLayer.current?.setFacilities([]);
 
     // 분포 모드가 있으면 그것만 그린다 — 순위 핀과 percentile 색점을 같이
@@ -371,7 +366,7 @@ export const AreaMap = memo(function AreaMap({
         duration: 600,
       });
     }
-  }, [areas, numbered, nearby, distribution, distributionMetric, polygonView, facilities, highlightStation]);
+  }, [areas, numbered, nearby, distribution, distributionMetric, overlays, highlightStation]);
 
   useEffect(() => {
     if (highlightStation) {

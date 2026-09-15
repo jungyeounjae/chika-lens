@@ -35,6 +35,22 @@ type Turn = {
   areas?: RankedArea[];
 };
 
+//: 재해위험 3D 카드의 색 범례 — polygonThreeLayer.ts 의 실제 색 배정과
+//: 맞춰 둔다(FLOOD_COLOR/HAZARD_HUE/SEDIMENT_*_COLOR 참고). 지도에 뜬
+//: 레이어만 골라 보여준다 — 없는 색까지 나열하면 오히려 헷갈린다.
+const HAZARD_LEGEND: Record<HazardPolygonResult["polygons"][number]["layer"], string> = {
+  flood: "파랑(진할수록 침수 깊음)=홍수",
+  liquefaction: "보라=액상화",
+  sediment: "노랑/빨강=토사재해(옐로존/레드존)",
+  storm_surge: "청록=고조(폭풍해일)",
+  tsunami: "자홍=쓰나미",
+};
+
+function hazardLegendText(polygons: HazardPolygonResult["polygons"]): string {
+  const layers = Array.from(new Set(polygons.map((p) => p.layer)));
+  return layers.map((layer) => HAZARD_LEGEND[layer]).join(", ");
+}
+
 const EXAMPLES = [
   "한식당이 많고 조용한 동네를 찾고 있어요",
   "아이 키우기 좋은 곳 추천해주세요",
@@ -256,6 +272,9 @@ export default function Home() {
                   </p>
                   {overlay.kind === "zoning" && (
                     <p className="mt-0.5 text-neutral-500">높이는 실제 건축 높이 제한이 아니라 시각적 근사치입니다.</p>
+                  )}
+                  {overlay.kind === "hazard" && (
+                    <p className="mt-0.5 text-neutral-500">{hazardLegendText(overlay.result.polygons)}</p>
                   )}
                   <p className="mt-1 text-[10px] text-neutral-500">{overlay.result.attribution}</p>
                 </div>

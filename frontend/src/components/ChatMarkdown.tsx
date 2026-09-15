@@ -1,4 +1,5 @@
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 /** 어시스턴트 서술을 마크다운으로 렌더링한다.
  *
@@ -27,6 +28,7 @@ export function ChatMarkdown({ text }: { text: string }) {
       }
     >
       <Markdown
+        remarkPlugins={[remarkGfm]}
         components={{
           // 링크를 낼 이유가 없다. 냈다면 새 탭으로, 참조는 끊어서.
           a: ({ children, href }) => (

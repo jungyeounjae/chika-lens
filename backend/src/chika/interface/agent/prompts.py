@@ -357,6 +357,37 @@ ANALYSIS_INSTRUCTIONS = """\
     "히카리가오카" -> "光が丘",  "기치조지" -> "吉祥寺",
     "신오쿠보" -> "新大久保",   "나카노" -> "中野"
   0건이 나오면 **표기를 바꿔 한 번 더 시도한 뒤에** 없다고 답합니다.
+- **explain_area 또는 rank_areas 1위 결과를 막 얻었다면, 아래 표에 따라
+  관련 3D 시각화 툴을 그 자리에서 이어서 자동으로 호출합니다** —
+  "3D로 보여줘"라고 말하지 않아도입니다. 사용자는 이 서비스에 3D 기능이
+  있는지조차 모르니, 관련 있으면 먼저 보여줍니다. explain_area 의
+  `strengths`/`weaknesses` 배열, 또는 rank_areas 1위 결과의 `top_drivers`
+  배열 — 이 중 어느 쪽이든 각 항목의 `metric` 필드를 확인합니다(둘 다
+  같은 문자열 값, 예: `"disaster_risk"`, `"park"`).
+
+  | 3D 툴 | 트리거 조건 |
+  |---|---|
+  | `hazard_polygons(station_id)` | `"disaster_risk"`가 있음 |
+  | `school_facilities(lat, lon)` | `"childcare_education"`/`"elementary_school"`/`"middle_school"` 중 하나라도 있음 |
+  | `park_polygons(lat, lon)` | `"park"`가 있음 |
+  | `zoning_massing(station_id)` | 조건 없음 — **매번** 포함 |
+
+  `residential_zone_ratio`는 다이얼 가중치가 항상 0이라 `strengths`/
+  `weaknesses`/`top_drivers`에 절대 나타나지 않습니다(위 참조) — 그래서
+  zoning_massing만 예외로 조건 없이 매번 부릅니다. `child_friendly_venue`는
+  이 표에서 제외합니다 — school_facilities가 실제로 다루는 데이터(학교·
+  보육시설)와 다른 카테고리(가족 동반 시설)라 이 항목으로 트리거하면
+  근거가 어긋납니다.
+
+  `lat`/`lon`/`station_id`는 방금 받은 explain_area/rank_areas 응답에 이미
+  있는 값을 그대로 씁니다 — 추가 조회가 필요 없습니다. 이 규칙은
+  metric_distribution에는 적용하지 않고, rank_areas는 **1위 결과에만**
+  적용합니다(2위 이하에 3D를 붙이면 지도가 과밀해집니다). 동시에 여러
+  조건이 맞으면 전부 같이 부릅니다 — 상한은 없습니다.
+
+  **같은 세션에서 같은 역에 대해 이미 자동으로 부른 3D 툴은 그 역을 다시
+  물어도(예: "가격은?", "조금 더 자세히") 재호출하지 않습니다** — 지도가
+  이미 그 정보를 보여주고 있습니다.
 - 둘 이상을 비교하면 compare_areas
 - **"지도에 보여줘", "주변은 어때", "색으로 표시해줘"처럼 한 지표의 공간적
   분포를 물으면 metric_distribution.** 방금 논의한 지표(예: 직전
@@ -394,12 +425,16 @@ ANALYSIS_INSTRUCTIONS = """\
   원하면 대신 hazard_polygons 를 씁니다** — 아래 참조.
 
   **사용자가 "3D/입체"라고 말하지 않았지만 재해위험(`disaster_risk`
-  또는 레이어별 5개) 이나 `residential_zone_ratio`를 역 하나에 대해
-  물어서 metric_distribution/explain_area 로 답한 경우, 답변 끝에 한
-  줄로 "원하시면 이 역 주변을 3D로도 보여드릴 수 있어요" 정도로 짧게
-  제안합니다.** 그 턴에 이미 hazard_polygons/zoning_massing 을 썼거나
-  사용자가 방금 3D를 보고 난 뒤라면 또 제안하지 않습니다 — 매번 붙이면
-  잔소리가 됩니다.
+  또는 레이어별 5개)을 역 하나에 대해 물어서 metric_distribution 또는
+  explain_area 로 답한 경우, 그리고 위 자동 트리거 규칙이 조건을 만족하지
+  못해 hazard_polygons를 부르지 않은 경우(즉 `disaster_risk`가
+  strengths/weaknesses에 없는 경우), 답변 끝에 한 줄로 "원하시면 이 역
+  주변을 3D로도 보여드릴 수 있어요" 정도로 짧게 제안합니다.**
+  `residential_zone_ratio`를 물은 경우엔 explain_area라면 위 자동 트리거
+  규칙이 이미 zoning_massing을 매번 부르므로 제안이 필요 없고,
+  metric_distribution만으로 물은 경우에는 여전히 이 제안을 붙입니다. 그
+  턴에 이미 hazard_polygons/zoning_massing 을 썼거나 사용자가 방금 3D를
+  보고 난 뒤라면 또 제안하지 않습니다 — 매번 붙이면 잔소리가 됩니다.
 
 - **"3D로/입체로 보여줘"처럼 원본 구역 경계 자체를 묻는 질문 —
   metric_distribution 이 아니라 hazard_polygons/zoning_massing.**

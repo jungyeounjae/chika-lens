@@ -157,6 +157,10 @@ def hazard_polygons(
     "이 역 침수 위험을 3D로/입체로 보여줘"처럼 원본 구역 경계·침수深 구간을
     묻는 질문에 쓴다. metric_distribution(정규화 percentile)과는 다른 툴이다.
     요청마다 MLIT을 실시간 호출하므로(과금 없음) 역 하나에만 쓴다.
+
+    또한 사용자가 3D를 요청하지 않아도, explain_area/rank_areas 1위 결과의
+    strengths/weaknesses/top_drivers 중 하나라도 metric이 "disaster_risk"이면
+    그 응답을 받은 직후 자동으로(먼저 묻지 않고) 이 툴을 이어서 호출한다.
     """
     return actions.act_hazard_polygons(ctx.context, station_id, radius_m=radius_m)
 
@@ -168,6 +172,12 @@ def zoning_massing(
     """역 하나 주변의 용도지역 **원본** MLIT Polygon (3D 도시 밀도 시각화용).
 
     "이 역 주변 건물 밀도/저층·상업지역을 3D로 보여줘"처럼 물을 때 쓴다.
+
+    또한 사용자가 3D를 요청하지 않아도, explain_area 또는 rank_areas 1위
+    결과를 받으면 조건 없이 **매번** 그 직후 자동으로 이 툴을 이어서
+    호출한다 — residential_zone_ratio는 다이얼 가중치가 0이라 strengths/
+    weaknesses/top_drivers에 절대 나타나지 않으므로, 이 툴만 예외로
+    무조건 자동 호출한다.
     """
     return actions.act_zoning_massing(ctx.context, station_id, radius_m=radius_m)
 
@@ -260,6 +270,11 @@ def school_facilities(
     결과가 0건이면 "이 반경 안에 학교/보육시설이 없다"는 뜻이지 조회 실패가
     아니다. `kind`는 원문 그대로(예: "小学校", "義務教育学校", 보육시설 종별) —
     한국어로 지어내 번역하지 않는다(자연스럽게 풀어서 설명하는 것은 괜찮다).
+
+    또한 사용자가 묻지 않아도, explain_area/rank_areas 1위 결과의
+    strengths/weaknesses/top_drivers 중 하나라도 metric이
+    "childcare_education"/"elementary_school"/"middle_school"이면 그 응답을
+    받은 직후 자동으로 이 툴을 이어서 호출한다.
     """
     return actions.act_school_facilities(ctx.context, lat=lat, lon=lon, radius_m=radius_m)
 
@@ -275,5 +290,9 @@ def park_polygons(
     있는 좌표를 그대로 넘긴다. 결과 0건은 "이 반경 안에 공원 없음"이지
     오류가 아니다. `name`이 `null`이면 OSM에 이름이 등록 안 된 공원이다 —
     "이름 미상의 공원"이라고 답하되 이름을 지어내지 않는다.
+
+    또한 사용자가 묻지 않아도, explain_area/rank_areas 1위 결과의
+    strengths/weaknesses/top_drivers 중 하나라도 metric이 "park"이면 그
+    응답을 받은 직후 자동으로 이 툴을 이어서 호출한다.
     """
     return actions.act_park_polygons(ctx.context, lat=lat, lon=lon, radius_m=radius_m)

@@ -16,7 +16,7 @@ import type {
   SchoolFacilitiesResult,
   ZoningMassingResult,
 } from "@/lib/types";
-import type { PolygonView } from "@/components/AreaMap";
+import type { Overlay } from "@/components/AreaMap";
 
 // maplibre 는 window 를 참조하므로 서버에서 렌더할 수 없다.
 const AreaMap = dynamic(() => import("@/components/AreaMap").then((m) => m.AreaMap), {
@@ -50,10 +50,10 @@ export default function Home() {
   // metric_distribution 결과. 있는 동안은 지도가 순위 핀 대신 percentile
   // 색점을 그린다 (AreaMap 참고).
   const [distribution, setDistribution] = useState<MetricDistribution | null>(null);
-  // hazard_polygons/zoning_massing 결과 — 원본 MLIT Polygon 3D 뷰.
-  const [polygonView, setPolygonView] = useState<PolygonView | null>(null);
-  // school_facilities 결과 — 좌표 주변 학교/보육시설 3D 마커.
-  const [facilities, setFacilities] = useState<SchoolFacilitiesResult | null>(null);
+  // hazard_polygons/zoning_massing/park_polygons/school_facilities 결과들 —
+  // 한 턴에 여러 개가 와도 전부 동시에 그린다(스펙
+  // 2026-09-15-frontend-multi-layer-overlay-design.md).
+  const [overlays, setOverlays] = useState<Overlay[]>([]);
   // 돔+스캐닝 링 강조 역 — explain_area·rank_areas·hazard/zoning 포커스 시
   const [highlightStation, setHighlightStation] = useState<{ lat: number; lon: number; radiusM?: number } | null>(null);
   const [input, setInput] = useState("");
@@ -86,8 +86,7 @@ export default function Home() {
               setNumbered(true);
               setNearby([]);
               setDistribution(null);
-              setPolygonView(null);
-              setFacilities(null);
+              setOverlays([]);
               // 1위 역에 돔+링 강조 표시
               const top = ranked.areas[0];
               if (top)
@@ -113,8 +112,7 @@ export default function Home() {
               setNumbered(false);
               setNearby(single.nearby ?? []);
               setDistribution(null);
-              setPolygonView(null);
-              setFacilities(null);
+              setOverlays([]);
               setHighlightStation((prev) =>
                 prev?.lat === single.lat && prev?.lon === single.lon && prev?.radiusM === 500
                   ? prev
@@ -126,16 +124,14 @@ export default function Home() {
               // 분포 모드는 순위/단일 조회 핀과 동시에 뜨면 색의 의미가
               // 헷갈린다 — AreaMap이 distribution 이 있으면 그것만 그린다.
               setDistribution(dist as MetricDistribution);
-              setPolygonView(null);
-              setFacilities(null);
+              setOverlays([]);
               // 전체 분포를 보는 모드 — 단일 강조 없앤다
               setHighlightStation(null);
             }
             if (event.tool === "hazard_polygons" && Array.isArray((event.result as { polygons?: unknown })?.polygons)) {
               const hazard = event.result as HazardPolygonResult;
               setDistribution(null);
-              setPolygonView({ kind: "hazard", result: hazard });
-              setFacilities(null);
+              setOverlays((prev) => [...prev.filter((o) => o.kind !== "hazard"), { kind: "hazard", result: hazard }]);
               setHighlightStation((prev) =>
                 prev?.lat === hazard.lat && prev?.lon === hazard.lon && prev?.radiusM === hazard.radius_m
                   ? prev
@@ -145,8 +141,7 @@ export default function Home() {
             if (event.tool === "zoning_massing" && Array.isArray((event.result as { polygons?: unknown })?.polygons)) {
               const zoning = event.result as ZoningMassingResult;
               setDistribution(null);
-              setPolygonView({ kind: "zoning", result: zoning });
-              setFacilities(null);
+              setOverlays((prev) => [...prev.filter((o) => o.kind !== "zoning"), { kind: "zoning", result: zoning }]);
               setHighlightStation((prev) =>
                 prev?.lat === zoning.lat && prev?.lon === zoning.lon && prev?.radiusM === zoning.radius_m
                   ? prev
@@ -156,8 +151,7 @@ export default function Home() {
             if (event.tool === "park_polygons" && Array.isArray((event.result as { polygons?: unknown })?.polygons)) {
               const park = event.result as ParkPolygonResult;
               setDistribution(null);
-              setPolygonView({ kind: "park", result: park });
-              setFacilities(null);
+              setOverlays((prev) => [...prev.filter((o) => o.kind !== "park"), { kind: "park", result: park }]);
               setHighlightStation((prev) =>
                 prev?.lat === park.lat && prev?.lon === park.lon && prev?.radiusM === park.radius_m
                   ? prev
@@ -167,8 +161,7 @@ export default function Home() {
             if (event.tool === "school_facilities" && Array.isArray((event.result as { facilities?: unknown })?.facilities)) {
               const school = event.result as SchoolFacilitiesResult;
               setDistribution(null);
-              setPolygonView(null);
-              setFacilities(school);
+              setOverlays((prev) => [...prev.filter((o) => o.kind !== "facilities"), { kind: "facilities", result: school }]);
               setHighlightStation((prev) =>
                 prev?.lat === school.lat && prev?.lon === school.lon && prev?.radiusM === school.radius_m
                   ? prev
@@ -215,34 +208,44 @@ export default function Home() {
           nearby={nearby}
           distribution={distribution?.points}
           distributionMetric={distribution?.metric}
-          polygonView={polygonView}
-          facilities={facilities}
+          overlays={overlays}
           highlightStation={highlightStation}
         />
-        {facilities && (
-          <div className="absolute bottom-3 left-3 rounded-lg border border-neutral-200 bg-white/95 px-3 py-2 text-xs shadow dark:border-neutral-700 dark:bg-neutral-900/95">
-            <p className="font-medium">학교/보육시설 3D ({facilities.facilities.length}건)</p>
-            <p className="mt-0.5 text-neutral-500">
-              주황 = 유치원·보육시설, 파랑 = 초등·중학교. 반경 {Math.round(facilities.radius_m)}m 이내.
-            </p>
-          </div>
-        )}
-        {polygonView && (
-          <div className="absolute bottom-3 left-3 rounded-lg border border-neutral-200 bg-white/95 px-3 py-2 text-xs shadow dark:border-neutral-700 dark:bg-neutral-900/95">
-            <p className="font-medium">
-              {polygonView.kind === "hazard"
-                ? "재해위험 3D (원본 구역)"
-                : polygonView.kind === "zoning"
-                  ? "용도지역 3D (원본 구역)"
-                  : "공원 3D (OSM)"}
-            </p>
-            {polygonView.kind === "zoning" && (
-              <p className="mt-0.5 text-neutral-500">높이는 실제 건축 높이 제한이 아니라 시각적 근사치입니다.</p>
+        {overlays.length > 0 && (
+          <div className="absolute bottom-3 left-3 flex flex-col gap-2">
+            {overlays.map((overlay, index) =>
+              overlay.kind === "facilities" ? (
+                <div
+                  key={`facilities-${index}`}
+                  className="rounded-lg border border-neutral-200 bg-white/95 px-3 py-2 text-xs shadow dark:border-neutral-700 dark:bg-neutral-900/95"
+                >
+                  <p className="font-medium">학교/보육시설 3D ({overlay.result.facilities.length}건)</p>
+                  <p className="mt-0.5 text-neutral-500">
+                    주황 = 유치원·보육시설, 파랑 = 초등·중학교. 반경 {Math.round(overlay.result.radius_m)}m 이내.
+                  </p>
+                </div>
+              ) : (
+                <div
+                  key={`${overlay.kind}-${index}`}
+                  className="rounded-lg border border-neutral-200 bg-white/95 px-3 py-2 text-xs shadow dark:border-neutral-700 dark:bg-neutral-900/95"
+                >
+                  <p className="font-medium">
+                    {overlay.kind === "hazard"
+                      ? "재해위험 3D (원본 구역)"
+                      : overlay.kind === "zoning"
+                        ? "용도지역 3D (원본 구역)"
+                        : "공원 3D (OSM)"}
+                  </p>
+                  {overlay.kind === "zoning" && (
+                    <p className="mt-0.5 text-neutral-500">높이는 실제 건축 높이 제한이 아니라 시각적 근사치입니다.</p>
+                  )}
+                  <p className="mt-1 text-[10px] text-neutral-500">{overlay.result.attribution}</p>
+                </div>
+              ),
             )}
-            <p className="mt-1 text-[10px] text-neutral-500">{polygonView.result.attribution}</p>
           </div>
         )}
-        {!polygonView && distribution && (
+        {overlays.length === 0 && distribution && (
           <div className="absolute bottom-3 left-3 rounded-lg border border-neutral-200 bg-white/95 px-3 py-2 text-xs shadow dark:border-neutral-700 dark:bg-neutral-900/95">
             <p className="font-medium">
               {distribution.label}

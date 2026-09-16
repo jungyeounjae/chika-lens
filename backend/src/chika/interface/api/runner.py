@@ -41,7 +41,9 @@ _TOOL_STATUS_KO: dict[str, str] = {
 #: 이 툴들은 모델에게는 좌표 없는 압축본만 주고, SSE로는 원본 좌표가 든
 #: 전체본을 낸다 — actions.py의 `_stash_full_and_strip_geometry`가 쌓아 둔
 #: `state.pending_overlay_payloads`에서 꺼낸다.
-_OVERLAY_TOOLS_WITH_STASHED_PAYLOAD = frozenset({"hazard_polygons", "zoning_massing", "park_polygons"})
+_OVERLAY_TOOLS_WITH_STASHED_PAYLOAD = frozenset(
+    {"hazard_polygons", "zoning_massing", "park_polygons"}
+)
 
 
 async def run_turn(state: SessionState, message: str) -> AsyncIterator[Event]:

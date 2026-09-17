@@ -34,6 +34,7 @@ from chika.domain.model.weights import DIAL_LABELS_KO, Dial, DialSettings, Weigh
 from chika.domain.service.dials import DIAL_TO_METRICS, expand_dials
 from chika.domain.service.personas import seed_dials
 from chika.etl.mlit_client import MlitApiError
+from chika.etl.nominatim_client import NominatimFetchError
 from chika.etl.overpass_client import OverpassFetchError
 from chika.interface.agent.state import SessionState
 
@@ -259,6 +260,46 @@ def act_lookup_station(state: SessionState, name: str) -> dict[str, Any]:
                 "lines": list(station.lines),
             }
             for station in matched[:MAX_LOOKUP_MATCHES]
+        ],
+    }
+
+
+def act_lookup_landmark(state: SessionState, name: str) -> dict[str, Any]:
+    """랜드마크/지명 이름으로 좌표와 가장 가까운 역을 찾는다.
+
+    lookup_station이 못 찾을 때(역이 아닌 공원·랜드마크·관광지 등) 이어서
+    쓴다. 반환된 nearest_station.station_id를 explain_area 등에 그대로
+    넘기면 된다. far_from_any_station이 true면 그 사실을 반드시 답변에
+    밝힌다 — 조용히 먼 역 데이터를 그 지점 것처럼 말하지 않는다.
+    """
+    query = name.strip()
+    if not query:
+        return {"query": name, "matches": []}
+    try:
+        candidates = state.usecases.lookup_landmark.execute(query)
+    except NominatimFetchError as exc:
+        return {"error": "geocoder_unavailable", "detail": str(exc)}
+
+    return {
+        "query": query,
+        "attribution": OSM_ATTRIBUTION,
+        "matches": [
+            {
+                "name": c.match.name,
+                "lat": c.match.lat,
+                "lon": c.match.lon,
+                "nearest_station": (
+                    {
+                        "station_id": c.nearest_station.station.id,
+                        "name_ja": c.nearest_station.station.name_ja,
+                        "distance_m": round(c.nearest_station.distance_m, 1),
+                    }
+                    if c.nearest_station is not None
+                    else None
+                ),
+                "far_from_any_station": c.far_from_any_station,
+            }
+            for c in candidates
         ],
     }
 

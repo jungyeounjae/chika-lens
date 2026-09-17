@@ -3,6 +3,7 @@ import pytest
 from chika.application.usecase.compare_areas import CompareAreas
 from chika.application.usecase.explain_area import ExplainArea
 from chika.application.usecase.hazard_polygons import HazardPolygons
+from chika.application.usecase.lookup_landmark import LookupLandmark
 from chika.application.usecase.metric_distribution import MetricDistribution
 from chika.application.usecase.metric_extremes import MetricExtremes
 from chika.application.usecase.new_construction_search import NewConstructionSearch
@@ -13,12 +14,14 @@ from chika.application.usecase.ward_price import WardPriceRanking
 from chika.application.usecase.zoning_massing import ZoningMassing
 from chika.domain.model.criteria import Household
 from chika.domain.model.facility import SchoolFacility
+from chika.domain.model.landmark import LandmarkMatch
 from chika.domain.model.metrics import MetricKey, RawMetrics
 from chika.domain.model.new_construction import NewConstructionListing
 from chika.domain.model.polygon import HazardPolygon, ParkPolygon, ZoningPolygon
 from chika.domain.model.station import Station
 from chika.domain.model.weights import Dial
 from chika.etl.mlit_client import MlitApiError
+from chika.etl.nominatim_client import NominatimFetchError
 from chika.etl.overpass_client import OverpassFetchError
 from chika.infrastructure.fake.repositories import (
     FakeAreaMetricsRepository,
@@ -31,6 +34,7 @@ from chika.interface.agent.actions import (
     act_explain_area,
     act_explain_new_construction,
     act_hazard_polygons,
+    act_lookup_landmark,
     act_lookup_new_construction,
     act_lookup_station,
     act_metric_distribution,
@@ -79,6 +83,13 @@ class _FakeParkPolygonSource:
     def polygons_near(
         self, lat: float, lon: float, radius_m: float
     ) -> list[ParkPolygon]:
+        return []
+
+
+class _FakeLandmarkGeocoder:
+    """`LandmarkGeocoder` 포트의 테스트 더블. 실제 Nominatim 호출이 없다."""
+
+    def search(self, query: str, limit: int) -> list[LandmarkMatch]:
         return []
 
 
@@ -155,6 +166,7 @@ def _deterministic_state(
             school_facilities=SchoolFacilities(_FakeSchoolFacilitySource()),
             park_polygons=ParkPolygons(_FakeParkPolygonSource()),
             new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
+            lookup_landmark=LookupLandmark(areas, _FakeLandmarkGeocoder()),
         )
     )
 
@@ -176,6 +188,7 @@ def state() -> SessionState:
             school_facilities=SchoolFacilities(_FakeSchoolFacilitySource()),
             park_polygons=ParkPolygons(_FakeParkPolygonSource()),
             new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
+            lookup_landmark=LookupLandmark(areas, _FakeLandmarkGeocoder()),
         )
     )
 
@@ -691,6 +704,66 @@ def test_explain_surfaces_nearby_stations_for_the_map(state: SessionState) -> No
     assert result["nearby"][0]["lines"] == ["大江戸線"]
 
 
+# --- 랜드마크 이름으로 찾기 ---
+
+
+class _FakeLandmarkGeocoderWith:
+    def __init__(self, matches: list[LandmarkMatch]) -> None:
+        self._matches = matches
+
+    def search(self, query: str, limit: int) -> list[LandmarkMatch]:
+        return self._matches
+
+
+class _RaisingLandmarkGeocoder:
+    def search(self, query: str, limit: int) -> list[LandmarkMatch]:
+        raise NominatimFetchError("HTTP 503")
+
+
+def _state_with_landmark_geocoder(geocoder) -> SessionState:  # noqa: ANN001
+    stations = [_station("a", name_ja="光が丘", ward="練馬区")]
+    areas = FakeAreaMetricsRepository(stations, [_raw("a")])
+    return SessionState(
+        usecases=UseCases(
+            rank=RankAreas(areas, FakeCommuteRepository({}), FakePriceRepository({})),
+            explain=ExplainArea(areas, FakePriceRepository({})),
+            compare=CompareAreas(areas),
+            distribution=MetricDistribution(areas),
+            ward_price=WardPriceRanking(areas),
+            extremes=MetricExtremes(areas),
+            hazard_polygons=HazardPolygons(areas, _FakeHazardPolygonSource()),
+            zoning_massing=ZoningMassing(areas, _FakeZoningPolygonSource()),
+            school_facilities=SchoolFacilities(_FakeSchoolFacilitySource()),
+            park_polygons=ParkPolygons(_FakeParkPolygonSource()),
+            new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
+            lookup_landmark=LookupLandmark(areas, geocoder),
+        )
+    )
+
+
+def test_lookup_landmark_returns_the_nearest_station_for_each_match() -> None:
+    match = LandmarkMatch(name="光が丘公園", lat=35.7585, lon=139.6295)
+    state = _state_with_landmark_geocoder(_FakeLandmarkGeocoderWith([match]))
+
+    result = act_lookup_landmark(state, "히카리가오카 공원")
+
+    assert result["matches"][0]["name"] == "光が丘公園"
+    assert result["matches"][0]["nearest_station"]["station_id"] == "a"
+    assert result["attribution"] == "© OpenStreetMap contributors"
+
+
+def test_lookup_landmark_returns_no_matches_when_the_query_is_blank() -> None:
+    state = _state_with_landmark_geocoder(_FakeLandmarkGeocoderWith([]))
+    result = act_lookup_landmark(state, "   ")
+    assert result["matches"] == []
+
+
+def test_lookup_landmark_reports_geocoder_unavailable_on_error() -> None:
+    state = _state_with_landmark_geocoder(_RaisingLandmarkGeocoder())
+    result = act_lookup_landmark(state, "아무 지명")
+    assert result["error"] == "geocoder_unavailable"
+
+
 # --- 페르소나 질문: "大久保는 신혼부부가 살기 좋은 동네야?" ---
 
 
@@ -1063,6 +1136,7 @@ def _state_with_sources(hazard_source, zoning_source) -> SessionState:  # noqa: 
             school_facilities=SchoolFacilities(_FakeSchoolFacilitySource()),
             park_polygons=ParkPolygons(_FakeParkPolygonSource()),
             new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
+            lookup_landmark=LookupLandmark(areas, _FakeLandmarkGeocoder()),
         )
     )
 
@@ -1192,6 +1266,7 @@ def _state_with_new_construction(listings: list[NewConstructionListing]) -> Sess
             school_facilities=SchoolFacilities(_FakeSchoolFacilitySource()),
             park_polygons=ParkPolygons(_FakeParkPolygonSource()),
             new_construction=NewConstructionSearch(_FakeNewConstructionRepo(listings)),
+            lookup_landmark=LookupLandmark(areas, _FakeLandmarkGeocoder()),
         )
     )
 
@@ -1326,6 +1401,7 @@ def _state_with_school_source(source) -> SessionState:  # noqa: ANN001
             new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
             school_facilities=SchoolFacilities(source),
             park_polygons=ParkPolygons(_FakeParkPolygonSource()),
+            lookup_landmark=LookupLandmark(areas, _FakeLandmarkGeocoder()),
         )
     )
 
@@ -1465,6 +1541,7 @@ def _state_with_park_source(source) -> SessionState:  # noqa: ANN001
             new_construction=NewConstructionSearch(_FakeNewConstructionRepo([])),
             school_facilities=SchoolFacilities(_FakeSchoolFacilitySource()),
             park_polygons=ParkPolygons(source),
+            lookup_landmark=LookupLandmark(areas, _FakeLandmarkGeocoder()),
         )
     )
 

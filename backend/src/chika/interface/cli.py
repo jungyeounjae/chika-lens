@@ -16,6 +16,7 @@ from pathlib import Path
 from chika.application.usecase.compare_areas import CompareAreas
 from chika.application.usecase.explain_area import ExplainArea
 from chika.application.usecase.hazard_polygons import HazardPolygons
+from chika.application.usecase.lookup_landmark import LookupLandmark
 from chika.application.usecase.metric_distribution import MetricDistribution
 from chika.application.usecase.metric_extremes import MetricExtremes
 from chika.application.usecase.new_construction_search import NewConstructionSearch
@@ -26,6 +27,7 @@ from chika.application.usecase.ward_price import WardPriceRanking
 from chika.application.usecase.zoning_massing import ZoningMassing
 from chika.etl.lazy_new_construction import ensure_ward_crawled
 from chika.etl.mlit_client import MlitClient
+from chika.etl.nominatim_client import NominatimClient
 from chika.etl.overpass_client import OverpassClient
 from chika.infrastructure.fake.repositories import (
     FakeAreaMetricsRepository,
@@ -38,6 +40,7 @@ from chika.infrastructure.file_new_construction import FileNewConstructionReposi
 from chika.infrastructure.mlit_hazard_source import MlitHazardPolygonSource
 from chika.infrastructure.mlit_school_source import MlitSchoolFacilitySource
 from chika.infrastructure.mlit_zoning_source import MlitZoningPolygonSource
+from chika.infrastructure.nominatim_geocoder import NominatimGeocoder
 from chika.infrastructure.overpass_park_source import OverpassParkSource
 from chika.interface.agent.actions import act_explain_area, act_rank_areas, act_set_criteria
 from chika.interface.agent.state import SessionState, UseCases
@@ -81,6 +84,7 @@ def build_demo_session(
             new_construction=NewConstructionSearch(
                 FileNewConstructionRepository(new_construction_path)
             ),
+            lookup_landmark=LookupLandmark(areas, NominatimGeocoder(NominatimClient())),
         ),
         ensure_ward_crawled=_ward_crawl_hook(),
     )
@@ -142,6 +146,7 @@ def build_real_session(
             new_construction=NewConstructionSearch(
                 FileNewConstructionRepository(new_construction_path)
             ),
+            lookup_landmark=LookupLandmark(areas, NominatimGeocoder(NominatimClient())),
         ),
         ensure_ward_crawled=_ward_crawl_hook(),
     )

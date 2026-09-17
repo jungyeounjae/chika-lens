@@ -65,6 +65,16 @@ def lookup_station(ctx: RunContextWrapper[SessionState], name: str) -> dict[str,
 
 
 @function_tool
+def lookup_landmark(ctx: RunContextWrapper[SessionState], name: str) -> dict[str, Any]:
+    """역이 아닌 지명(공원·랜드마크·관광지 등)으로 좌표와 가장 가까운 역을
+    찾는다. lookup_station이 못 찾았을 때 이어서 쓴다. 결과의
+    nearest_station.station_id를 explain_area 등에 그대로 넘긴다.
+    far_from_any_station이 true면 그 사실을 답변에 반드시 밝힌다.
+    """
+    return actions.act_lookup_landmark(ctx.context, name)
+
+
+@function_tool
 def rank_areas(ctx: RunContextWrapper[SessionState], limit: int = 5) -> dict[str, Any]:
     """확정된 조건으로 역세권을 점수화해 상위 N곳을 반환한다.
 

@@ -9,6 +9,7 @@ from typing import Any
 from chika.application.usecase.compare_areas import CompareAreas
 from chika.application.usecase.explain_area import ExplainArea
 from chika.application.usecase.hazard_polygons import HazardPolygons
+from chika.application.usecase.lookup_landmark import LookupLandmark
 from chika.application.usecase.metric_distribution import MetricDistribution
 from chika.application.usecase.metric_extremes import MetricExtremes
 from chika.application.usecase.new_construction_search import NewConstructionSearch
@@ -42,6 +43,9 @@ class UseCases:
     #: SUUMO 신축 분양 물건 검색 — 배치 산출물(new_construction_enriched.json)만
     #: 읽는다. 실시간 크롤링 없음.
     new_construction: NewConstructionSearch
+    #: 랜드마크 이름 → 좌표 → 가장 가까운 역. lookup_station이 못 찾을 때
+    #: 이어서 쓴다(lookup_landmark.py 참고).
+    lookup_landmark: LookupLandmark
 
 
 def _no_op_ward_crawl(_ward: str) -> None:

@@ -25,6 +25,7 @@ def test_analysis_agent_exposes_the_analysis_tools() -> None:
     assert set(t.name for t in analysis.tools) == {
         "rank_areas",
         "lookup_station",
+        "lookup_landmark",
         "explain_area",
         "compare_areas",
         "metric_distribution",

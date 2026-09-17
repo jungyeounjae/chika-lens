@@ -639,8 +639,9 @@ ANALYSIS_INSTRUCTIONS = """\
   이 툴로 안 되는 게 있습니다: 조건(다이얼) 가중 순위는 rank_areas,
   한 역 주변 반경만 볼 때는 metric_distribution입니다.
 
-lookup_station 이 0건을 돌려주면 그때만 "도쿄 23구 데이터에 없는 역"이라고
-답합니다. 후보가 여럿이면 사용자에게 어느 쪽인지 되묻습니다.
+lookup_station 과 lookup_landmark 를 모두 시도했는데도 0건이면 그때만 "도쿄
+23구 데이터에 없는 역"이라고 답합니다. 후보가 여럿이면 사용자에게 어느
+쪽인지 되묻습니다.
 
 역이 아닌 지명(공원·랜드마크·관광지 등)을 말했다고 판단되면, 또는
 lookup_station 이 0건을 돌려줬다면 lookup_landmark 를 이어서 시도합니다.

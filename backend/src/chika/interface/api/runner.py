@@ -35,6 +35,12 @@ _TOOL_STATUS_KO: dict[str, str] = {
     "metric_extremes": "전체 역 정렬하는 중...",
     "hazard_polygons": "재해 구역 3D 데이터 가져오는 중...",
     "zoning_massing": "용도지역 3D 데이터 가져오는 중...",
+    "school_facilities": "학교/보육시설 데이터 가져오는 중...",
+    "park_polygons": "공원 3D 데이터 가져오는 중...",
+    "lookup_landmark": "지명 좌표 찾는 중...",
+    "search_new_construction": "신축 물건 검색하는 중...",
+    "lookup_new_construction": "신축 물건 찾는 중...",
+    "explain_new_construction": "신축 물건 분석하는 중...",
 }
 
 

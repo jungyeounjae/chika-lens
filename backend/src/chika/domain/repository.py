@@ -7,6 +7,7 @@ from typing import Protocol
 
 from chika.domain.model.criteria import Household
 from chika.domain.model.facility import SchoolFacility
+from chika.domain.model.landmark import LandmarkMatch
 from chika.domain.model.metrics import RawMetrics
 from chika.domain.model.new_construction import NewConstructionListing
 from chika.domain.model.polygon import HazardPolygon, ParkPolygon, ZoningPolygon
@@ -72,3 +73,10 @@ class ParkPolygonSource(Protocol):
     Overpass 응답을 이미 GeoJSON으로 변환한 결과만 돌려준다."""
 
     def polygons_near(self, lat: float, lon: float, radius_m: float) -> Sequence[ParkPolygon]: ...
+
+
+class LandmarkGeocoder(Protocol):
+    """랜드마크/POI 이름 → 좌표 지오코딩 포트. 구현체(infrastructure)가
+    외부 API 호출·재시도를 끝낸 결과만 돌려준다."""
+
+    def search(self, query: str, limit: int) -> Sequence[LandmarkMatch]: ...

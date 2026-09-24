@@ -75,6 +75,28 @@ def test_a_different_session_id_gets_fresh_state() -> None:
     assert len(client.sessions_built) == 2  # type: ignore[attr-defined]
 
 
+def test_a_runner_exception_does_not_leak_its_raw_message_to_the_client() -> None:
+    """내부 예외 문자열(스택트레이스·API 키 등)이 사용자 화면에 그대로 나가면
+    안 된다 — 서버 로그에만 남기고, 클라이언트에는 일반 안내 문구만 준다."""
+
+    def failing_runner(state: SessionState, message: str) -> AsyncIterator[Event]:
+        async def gen() -> AsyncIterator[Event]:
+            raise RuntimeError("sk-secret-key-12345 로 호출했으나 500")
+            yield  # pragma: no cover - unreachable, makes this an async generator
+
+        return gen()
+
+    response = _client(runner=failing_runner).post(
+        "/chat", json={"session_id": "s1", "message": "안녕"}
+    )
+    events = _events(response)
+    error_events = [payload for name, payload in events if name == "error"]
+    assert len(error_events) == 1
+    assert error_events[0]["code"] == "agent_error"
+    assert "sk-secret-key-12345" not in error_events[0]["message"]
+    assert events[-1][0] == "done"
+
+
 def test_rate_limited_requests_get_429_without_running_the_agent() -> None:
     ran: list[str] = []
 

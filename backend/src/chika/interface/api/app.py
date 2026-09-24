@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import AsyncIterator, Callable
 from typing import Protocol
@@ -21,6 +22,12 @@ from chika.interface.api.guards import CostGuard, DailyCapReached, GuardRefused,
 from chika.interface.api.memory import InMemorySession
 from chika.interface.api.sessions import SessionStore
 from chika.interface.cli import build_real_session
+
+logger = logging.getLogger(__name__)
+
+#: 사용자에게 보이는 문구. 원본 예외 메시지(스택 내용·API 키 등)는 여기 절대
+#: 넣지 않는다 — 서버 로그(logger.exception)에만 남긴다.
+_GENERIC_AGENT_ERROR_MESSAGE = "요청을 처리하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
 
 
 class AgentRunner(Protocol):
@@ -92,8 +99,9 @@ def create_app(
             try:
                 async for event in runner(state, body.message):
                     yield event
-            except Exception as exc:  # noqa: BLE001 - 스트림 중 오류를 이벤트로 전달
-                yield error_event("agent_error", str(exc))
+            except Exception:  # noqa: BLE001 - 스트림 중 오류를 이벤트로 전달
+                logger.exception("agent run failed (session_id=%s)", body.session_id)
+                yield error_event("agent_error", _GENERIC_AGENT_ERROR_MESSAGE)
             yield done_event(cost_guard.remaining_today())
 
         return EventSourceResponse(stream())

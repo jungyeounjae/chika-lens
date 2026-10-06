@@ -46,6 +46,10 @@ class SearchCriteria:
     #: 다이얼로는 지표 하나만 표현할 방법이 없어서(다이얼은 여러 지표를
     #: 묶는 구조다) 이 필드가 따로 필요하다.
     focus_metric: MetricKey | None = None
+    #: 공항·터미널·관청가 같은 비주거 역(스펙 §8.3)을 랭킹에 포함할지.
+    #: 기본은 제외다 — 판정이 틀릴 수 있어(東大島·潮見) 사용자가 "그래도
+    #: 보고 싶다"고 하면 켠다. 퍼센타일 모집단에는 영향이 없다.
+    include_non_residential: bool = False
 
     def __post_init__(self) -> None:
         if self.budget_yen is not None:

@@ -85,6 +85,8 @@ def _interpretation(criteria: SearchCriteria) -> dict[str, Any]:
             if criteria.focus_metric is not None
             else None
         ),
+        # true 면 공항·터미널·관청가 같은 비주거 역도 랭킹에 들어간다.
+        "include_non_residential": criteria.include_non_residential,
     }
 
 
@@ -119,6 +121,7 @@ def act_set_criteria(
     household: str | None = None,
     exclude_wards: Sequence[str] | None = None,
     focus_metric: str | None = None,
+    include_non_residential: bool | None = None,
 ) -> dict[str, Any]:
     """대화에서 모은 조건을 세션에 확정한다.
 
@@ -206,6 +209,11 @@ def act_set_criteria(
             else (previous.exclude_wards if previous else ())
         ),
         focus_metric=focus_metric_key,
+        include_non_residential=(
+            include_non_residential
+            if include_non_residential is not None
+            else (previous.include_non_residential if previous else False)
+        ),
     )
     state.criteria = criteria
     state.last_ranking = []
@@ -425,6 +433,9 @@ def act_explain_area(state: SessionState, station_id: str) -> dict[str, Any]:
             for dial, items in explanation.by_dial.items()
         },
         "missing_metrics": _missing(explanation.missing),
+        # 공항·터미널·관청가 등 주거 대상이 아닐 가능성이 높은 역. true 면
+        # 답변에서 "주거지로는 적합하지 않을 수 있다"고 밝힌다.
+        "is_non_residential": explanation.is_non_residential,
         # 주변 역. 좌표가 로컬에 있어 API 비용이 0이다 —
         # 역이 하나뿐인 동네와 노선이 겹치는 동네의 차이를 지도가 보여준다.
         "nearby": [

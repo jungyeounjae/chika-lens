@@ -17,6 +17,7 @@ from chika.domain.repository import (
 )
 from chika.domain.service.dials import expand_dials
 from chika.domain.service.normalization import normalize
+from chika.domain.service.residential import is_non_residential
 from chika.domain.service.scoring import rank
 
 
@@ -46,8 +47,14 @@ class RankAreas:
 
     def execute(self, criteria: SearchCriteria, limit: int = 5) -> list[RankedArea]:
         stations = {station.id: station for station in self._areas.stations()}
+        raws = self._areas.raw_metrics()
+        non_residential = (
+            set()
+            if criteria.include_non_residential
+            else {raw.station_id for raw in raws if is_non_residential(raw)}
+        )
         # 퍼센타일은 필터 이전, 전체 모집단 기준으로 계산한다 (스펙 §6.3).
-        normalized = normalize(self._areas.raw_metrics())
+        normalized = normalize(raws)
         percentiles_by_id = {area.station_id: area.percentile for area in normalized}
         # focus_metric 이 있으면 다이얼 전개를 건너뛰고 그 지표 하나에만
         # 가중치 1.0을 준다 — "공원"이 quality_of_life 다이얼(카페·공원·
@@ -77,6 +84,8 @@ class RankAreas:
             if station is None:
                 continue
             if station.ward in criteria.exclude_wards:
+                continue
+            if station.id in non_residential:
                 continue
 
             rent = rents.get(station.id)

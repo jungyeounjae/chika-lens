@@ -234,3 +234,17 @@ def test_a_missing_metric_has_no_raw_value() -> None:
     park = next((d for d in details if d.key is MetricKey.PARK), None)
     if park is not None:
         assert park.raw_value is None
+
+
+def test_flags_non_residential_station_but_still_explains_it() -> None:
+    usecase = _usecase(
+        [_station("airport"), _station("town")],
+        [
+            _raw("airport", residential_zone_ratio=0.0, supermarket=0.0),
+            _raw("town", residential_zone_ratio=0.6),
+        ],
+        {},
+    )
+    criteria = SearchCriteria(dials=DialSettings.balanced())
+    assert usecase.execute("airport", criteria).is_non_residential
+    assert not usecase.execute("town", criteria).is_non_residential

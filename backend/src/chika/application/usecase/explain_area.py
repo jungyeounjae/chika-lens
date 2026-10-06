@@ -16,6 +16,7 @@ from chika.domain.repository import AreaMetricsRepository, PriceRepository
 from chika.domain.service.dials import DIAL_TO_METRICS, expand_dials
 from chika.domain.service.geo import distance_meters
 from chika.domain.service.normalization import normalize
+from chika.domain.service.residential import is_non_residential
 from chika.domain.service.scoring import score
 
 
@@ -62,6 +63,10 @@ class AreaExplanation:
     #: 주변 역. 좌표가 이미 로컬에 있어 API 호출이 필요 없다 —
     #: 역이 하나뿐인 동네와 여러 노선이 겹치는 동네의 차이를 지도에서 보여준다.
     nearby: list[NearbyStation]
+    #: 주거 대상이 아닐 가능성이 높은 역(공항·터미널·관청가 등, 스펙 §8.3).
+    #: 랭킹에서는 기본 제외되지만 이름으로 직접 물으면 설명은 해 준다 —
+    #: 대신 이 사실을 답변에 밝히게 한다.
+    is_non_residential: bool
 
 
 class ExplainArea:
@@ -116,6 +121,7 @@ class ExplainArea:
             weaknesses=[detail(key) for key, _ in area_score.bottom_drivers(top_n)],
             by_dial=by_dial,
             missing=sorted(area.missing),
+            is_non_residential=raw is not None and is_non_residential(raw),
         )
 
 

@@ -25,6 +25,7 @@ def set_criteria(
     household: str | None = None,
     exclude_wards: list[str] | None = None,
     focus_metric: str | None = None,
+    include_non_residential: bool | None = None,
 ) -> dict[str, Any]:
     """사용자 조건을 확정한다. 다이얼 5개는 0~5의 상대 강도다.
 
@@ -40,6 +41,10 @@ def set_criteria(
     다른 조건과 같이 물었으면 채우지 마세요 — 다이얼 기반 종합 랭킹이
     맞습니다. 이 필드는 매번 다시 판단합니다 — 생략하면 이전 값이
     유지되지 않고 꺼집니다(다른 필드와 다릅니다).
+
+    공항·크루즈터미널·관청가·물류단지 같은 비주거 역은 랭킹에서 기본으로
+    빠집니다. 사용자가 그런 역도 보고 싶다고 명시했을 때만
+    `include_non_residential=true`로 켭니다. 생략하면 이전 값이 유지됩니다.
     """
     return actions.act_set_criteria(
         ctx.context,
@@ -55,6 +60,7 @@ def set_criteria(
         household=household,
         exclude_wards=exclude_wards or (),
         focus_metric=focus_metric,
+        include_non_residential=include_non_residential,
     )
 
 

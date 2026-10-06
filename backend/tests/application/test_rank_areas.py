@@ -105,6 +105,31 @@ def test_excluded_ward_is_removed() -> None:
     assert [r.station.id for r in result] == ["b"]
 
 
+def _airport_raw(station_id: str) -> RawMetrics:
+    return _raw(station_id, residential_zone_ratio=0.0, supermarket=0.0, cafe=99.0)
+
+
+def test_non_residential_station_is_excluded_by_default() -> None:
+    usecase = _usecase(
+        [_station("airport"), _station("town")],
+        [_airport_raw("airport"), _raw("town", residential_zone_ratio=0.6)],
+    )
+    result = usecase.execute(SearchCriteria(dials=DialSettings.balanced()), limit=10)
+    assert [r.station.id for r in result] == ["town"]
+
+
+def test_non_residential_station_returns_when_user_asks_for_it() -> None:
+    usecase = _usecase(
+        [_station("airport"), _station("town")],
+        [_airport_raw("airport"), _raw("town", residential_zone_ratio=0.6)],
+    )
+    result = usecase.execute(
+        SearchCriteria(dials=DialSettings.balanced(), include_non_residential=True),
+        limit=10,
+    )
+    assert {r.station.id for r in result} == {"airport", "town"}
+
+
 def test_budget_filter_drops_stations_over_the_ceiling() -> None:
     usecase = _usecase(
         [_station("cheap"), _station("pricey")],

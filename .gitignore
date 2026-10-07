@@ -95,3 +95,6 @@ htmlcov/
 frontend/.next/
 frontend/node_modules/
 frontend/out/
+
+# Portfolio (personal career material — keep out of the public repo)
+docs/portfolio/
